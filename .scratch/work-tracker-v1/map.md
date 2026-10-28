@@ -22,12 +22,10 @@ A reviewed v1 spec for the Work Tracker, ready for `/to-tickets`. It covers the 
 
 ## Not yet specified
 
-- Detecting sleep, wake and missed ticks on each operating system, so the gap popup fires correctly.
 - Packaging, code signing, autostart registration and updates for macOS and Windows.
 - Screen-by-screen onboarding flow and the settings screen.
 - Test seams for the feature, which `/to-spec` must confirm with you.
 - Error handling and data safety: failed export, corrupt database, schema migration.
-- Absence creation in the calendar UI, and the daily total against expected working time.
 
 ## Out of scope
 
