@@ -16,6 +16,10 @@ A reviewed v1 spec for the Work Tracker, ready for `/to-tickets`. It covers the 
 
 - [Product scope and behaviour](issues/01-product-scope-and-behaviour.md): v1 scope, vocabulary, backward-looking popup, 15-minute snap, two-sheet export, recurrence as RRULE with exceptions, tray app, local SQLite.
 
+- [Calendar UI library](issues/02-calendar-ui-library.md): FullCalendar v7 with `rrule` fits; we build per-occurrence exceptions and hotkeys ourselves.
+- [Tauri capabilities](issues/03-tauri-capabilities.md): tray, autostart, popup window and hotkeys work; SQLite route (`rusqlite` or SQL plugin) is open; `rust_xlsxwriter` for Excel; sleep and wake needs a gap check.
+- [iCalendar libraries](issues/04-icalendar-libraries.md): `ical.js` plus `rrule-temporal` in TypeScript; time zones are the main risk; exceptions go in our own tables.
+
 ## Not yet specified
 
 - Detecting sleep, wake and missed ticks on each operating system, so the gap popup fires correctly.
