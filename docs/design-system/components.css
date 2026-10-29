@@ -1,0 +1,148 @@
+/*
+ * Work Tracker components for the popup.
+ * Needs tokens.css. Uses component tokens only. No raw colors, sizes or radii.
+ * Class names use the "wt-" prefix.
+ */
+
+.wt-popup {
+  background: var(--popup-bg);
+  color: var(--popup-fg);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  font: var(--text-body) var(--font-body);
+  outline: none;
+}
+
+.wt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--popup-header-py) var(--popup-header-px);
+  background: var(--popup-header-bg);
+  border-radius: var(--popup-radius) var(--popup-radius) 0 0;
+}
+.wt-sub { color: var(--color-text-muted); font-size: var(--text-caption); }
+
+.wt-thread {
+  display: grid;
+  gap: var(--thread-gap);
+  align-content: start;
+  padding: var(--thread-padding);
+  min-height: var(--thread-min-height);
+  max-height: var(--thread-max-height);
+  overflow: auto;
+  background: var(--thread-bg);
+  scroll-behavior: smooth;
+}
+
+.wt-bot {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+  animation: wt-in var(--p-duration-enter) var(--p-ease-out);
+}
+.wt-bot > .wt-bubble {
+  background: var(--bubble-bot-bg);
+  border: 1px solid var(--bubble-bot-border);
+  border-radius: var(--bubble-radius) var(--bubble-radius) var(--bubble-radius) var(--bubble-tail-radius);
+}
+.wt-me {
+  justify-self: end;
+  background: var(--bubble-me-bg);
+  color: var(--bubble-me-fg);
+  border-radius: var(--bubble-radius) var(--bubble-radius) var(--bubble-tail-radius) var(--bubble-radius);
+  animation: wt-in var(--p-duration-enter) var(--p-ease-out);
+}
+.wt-bubble, .wt-me {
+  padding: var(--bubble-py) var(--bubble-px);
+  max-width: var(--bubble-max-width);
+  line-height: var(--leading-body);
+}
+
+.wt-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+}
+.wt-composer {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--popup-radius) var(--popup-radius);
+}
+.wt-label { color: var(--color-text-muted); font-size: var(--text-caption); min-width: 58px; }
+
+.wt-chip {
+  min-height: var(--chip-height);
+  padding: 0 var(--chip-px);
+  font: inherit;
+  font-size: var(--chip-font-size);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  border: 1px solid var(--chip-border);
+  border-radius: var(--chip-radius);
+  cursor: pointer;
+  transition: background var(--p-duration-fast), border-color var(--p-duration-fast);
+}
+.wt-chip:hover { border-color: var(--chip-border-hover); }
+.wt-chip[aria-pressed="true"],
+.wt-chip.is-primary {
+  background: var(--chip-bg-on);
+  color: var(--chip-fg-on);
+  border-color: var(--chip-bg-on);
+}
+
+.wt-input {
+  width: 100%;
+  min-height: var(--input-height);
+  padding: 0 var(--space-sm);
+  font: inherit;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+}
+.wt-input::placeholder { color: var(--input-placeholder); }
+
+.wt-combo { position: relative; }
+.wt-combo ul {
+  position: absolute;
+  left: 0; right: 0; bottom: 100%;
+  margin: 0 0 2px; padding: 0;
+  list-style: none;
+  max-height: 150px;
+  overflow: auto;
+  background: var(--listbox-bg);
+  border: 1px solid var(--listbox-border);
+  border-radius: 6px;
+  box-shadow: var(--listbox-shadow);
+  z-index: 5;
+}
+.wt-combo li { padding: 6px var(--space-sm); cursor: pointer; }
+.wt-combo li.is-active {
+  background: var(--listbox-option-active-bg);
+  outline: 1px solid var(--listbox-option-active-ring);
+  outline-offset: -1px;
+}
+
+.wt-error { color: var(--error-fg); font-size: var(--text-caption); min-height: 16px; }
+
+.wt-popup :focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.wt-input:focus-visible { outline-offset: 0; border-color: var(--input-border-focus); }
+
+@keyframes wt-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .wt-popup, .wt-popup * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.wt-startup {
+  padding: var(--startup-padding);
+  max-width: var(--startup-max-width);
+  color: var(--popup-fg);
+  font: var(--text-body) var(--font-body);
+}
+.wt-startup pre { white-space: pre-wrap; }
+.wt-startup-actions { display: flex; flex-wrap: wrap; gap: var(--startup-gap); }

@@ -22,6 +22,20 @@ pub enum Failure {
     Corrupt { error: String, latest_backup: Option<String> },
 }
 
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Failure::Migration { from, to, error } => {
+                write!(f, "The update from data version {from} to {to} failed: {error}")
+            }
+            Failure::TooNew { found, supported } => {
+                write!(f, "The data has version {found}. This app supports up to version {supported}.")
+            }
+            Failure::Corrupt { error, .. } => write!(f, "The database is damaged: {error}"),
+        }
+    }
+}
+
 pub fn db_path(dir: &Path) -> PathBuf {
     dir.join("tracker.db")
 }
@@ -98,7 +112,9 @@ fn open_with(dir: &Path, migrations: &Migrations, latest: i64) -> Result<Connect
         return Err(corrupt(check));
     }
 
-    let found: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+    let found: i64 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .map_err(|e| corrupt(e.to_string()))?;
     if found > latest {
         return Err(Failure::TooNew { found, supported: latest });
     }
@@ -118,7 +134,7 @@ fn open_with(dir: &Path, migrations: &Migrations, latest: i64) -> Result<Connect
 }
 
 /// Rename the bad database to `tracker-corrupt-<date>.db`. It never replaces an older corrupt file.
-fn set_aside(dir: &Path) -> Result<(), String> {
+fn set_aside(dir: &Path) -> Result<PathBuf, String> {
     let date = today();
     let mut target = dir.join(format!("tracker-corrupt-{date}.db"));
     for n in 2.. {
@@ -127,22 +143,32 @@ fn set_aside(dir: &Path) -> Result<(), String> {
         }
         target = dir.join(format!("tracker-corrupt-{date}-{n}.db"));
     }
-    fs::rename(db_path(dir), target).map_err(|e| e.to_string())
+    fs::rename(db_path(dir), &target).map_err(|e| e.to_string())?;
+    Ok(target)
 }
 
 pub fn start_empty(dir: &Path) -> Result<Connection, String> {
     set_aside(dir)?;
-    open_safely(dir).map_err(|f| format!("{f:?}"))
+    open_safely(dir).map_err(|f| f.to_string())
 }
 
 /// Returns the new connection and how many days of data may be missing.
 pub fn restore_latest_backup(dir: &Path) -> Result<(Connection, i64), String> {
     let backup = daily_backups(dir).pop().ok_or("There is no backup.")?;
     let missing: i64 = sql("SELECT CAST(julianday(?1) - julianday(?2) AS INTEGER)", [today(), backup_date(&backup)]);
-    set_aside(dir)?;
-    fs::copy(&backup, db_path(dir)).map_err(|e| e.to_string())?;
-    let conn = open_safely(dir).map_err(|f| format!("{f:?}"))?;
-    Ok((conn, missing))
+    let bad = set_aside(dir)?;
+    let opened = fs::copy(&backup, db_path(dir))
+        .map_err(|e| e.to_string())
+        .and_then(|_| open_safely(dir).map_err(|f| f.to_string()));
+    match opened {
+        Ok(conn) => Ok((conn, missing)),
+        Err(e) => {
+            // Put the bad file back, so the next start shows the recovery screen again.
+            let _ = fs::remove_file(db_path(dir));
+            let _ = fs::rename(bad, db_path(dir));
+            Err(e)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -250,6 +276,20 @@ mod tests {
 
         assert_eq!(count_categories(&conn), 0);
         assert!(dir.path().join(format!("tracker-corrupt-{}.db", today())).exists());
+    }
+
+    #[test]
+    fn a_failed_restore_puts_the_bad_file_back() {
+        let dir = dir_with_data();
+        Connection::open(backups_dir(dir.path()).join(format!("tracker-{}.db", today())))
+            .unwrap()
+            .pragma_update(None, "user_version", 99)
+            .unwrap();
+        write_garbage(dir.path());
+
+        assert!(restore_latest_backup(dir.path()).is_err());
+
+        assert!(matches!(open_safely(dir.path()), Err(Failure::Corrupt { .. })));
     }
 
     #[test]

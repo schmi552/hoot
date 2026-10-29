@@ -1,0 +1,204 @@
+/*
+ * Work Tracker design tokens.
+ * Source: prototype 06, variant D (.scratch/work-tracker-v1/prototypes/06-popup/index.html).
+ * Three layers: primitive -> semantic -> component.
+ * Components use semantic and component tokens only. Never use a primitive or a raw value in a component.
+ * Dark theme: follows the system. Override with data-theme="light" or data-theme="dark" on <html>.
+ */
+
+/* ---------- 1. Primitive: raw values, no meaning ---------- */
+:root {
+  /* Neutral */
+  --p-white: #fff;
+  --p-gray-100: #f1f2f5;
+  --p-gray-300: #d9dce3;
+  --p-gray-600: #586070;
+  --p-ink-900: #14171f;
+  --p-night-100: #eceef2;
+  --p-night-300: #a3aab8;
+  --p-night-500: #363c46;
+  --p-night-600: #2a3038;
+  --p-night-700: #1d2127;
+  --p-night-800: #14171c;
+
+  /* Blue (accent) */
+  --p-blue-300: #9db6ff;
+  --p-blue-400: #6d92f5;
+  --p-blue-600: #2457d6;
+  --p-blue-950: #0b1220;
+
+  /* Red (danger) */
+  --p-red-300: #ff8a80;
+  --p-red-700: #b42318;
+
+  /* Warm (header, mascot) */
+  --p-peach-100: #fdeede;
+  --p-peach-900: #3a2a1e;
+  --p-orange-500: #e8743b;
+  --p-brown-800: #7a2b0a;
+  --p-black: #111;
+
+  /* Space: 4 px grid */
+  --p-space-1: 4px;
+  --p-space-2: 8px;
+  --p-space-3: 12px;
+
+  /* Radius */
+  --p-radius-xs: 3px;
+  --p-radius-md: 10px;
+  --p-radius-lg: 14px;
+  --p-radius-pill: 99px;
+
+  /* Type */
+  --p-font-sans: system-ui, sans-serif;
+  --p-font-mono: ui-monospace, monospace;
+  --p-text-12: 12px;
+  --p-text-13: 13px;
+  --p-text-14: 14px;
+  --p-leading-body: 1.4;
+
+  /* Motion */
+  --p-duration-fast: 0.12s;
+  --p-duration-enter: 0.18s;
+  --p-ease-out: ease-out;
+
+  /* Elevation */
+  --p-shadow-popup: 0 10px 40px #000a;
+  --p-shadow-listbox: 0 -6px 20px #0003;
+
+  /* Size */
+  --p-size-control: 36px;
+  --p-size-pixel-sm: 3px; /* mascot pixel, popup */
+  --p-size-pixel-md: 5px; /* mascot pixel, onboarding or empty state */
+}
+
+/* ---------- 2. Semantic: purpose, theme-aware ---------- */
+:root {
+  --color-surface: var(--p-white);
+  --color-surface-sunken: var(--p-gray-100);
+  --color-surface-header: var(--p-peach-100);
+  --color-surface-bot: var(--p-white);
+  --color-border: var(--p-gray-300);
+  --color-text: var(--p-ink-900);
+  --color-text-muted: var(--p-gray-600);
+  --color-accent: var(--p-blue-600);
+  --color-on-accent: var(--p-white);
+  --color-focus: var(--p-blue-600);
+  --color-danger: var(--p-red-700);
+
+  --color-mascot-body: var(--p-orange-500);
+  --color-mascot-eye: var(--p-black);
+  --color-mascot-mouth: var(--p-brown-800);
+
+  --space-xs: var(--p-space-1);
+  --space-sm: var(--p-space-2);
+  --space-md: var(--p-space-3);
+
+  --radius-container: var(--p-radius-md);
+  --radius-bubble: var(--p-radius-lg);
+  --radius-bubble-tail: var(--p-radius-xs);
+  --radius-control: var(--p-radius-pill);
+
+  --font-body: var(--p-font-sans);
+  --text-caption: var(--p-text-12);
+  --text-control: var(--p-text-13);
+  --text-body: var(--p-text-14);
+  --leading-body: var(--p-leading-body);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-surface: var(--p-night-700);
+    --color-surface-sunken: var(--p-night-800);
+    --color-surface-header: var(--p-peach-900);
+    --color-surface-bot: var(--p-night-600);
+    --color-border: var(--p-night-500);
+    --color-text: var(--p-night-100);
+    --color-text-muted: var(--p-night-300);
+    --color-accent: var(--p-blue-400);
+    --color-on-accent: var(--p-blue-950);
+    --color-focus: var(--p-blue-300);
+    --color-danger: var(--p-red-300);
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-surface: var(--p-night-700);
+  --color-surface-sunken: var(--p-night-800);
+  --color-surface-header: var(--p-peach-900);
+  --color-surface-bot: var(--p-night-600);
+  --color-border: var(--p-night-500);
+  --color-text: var(--p-night-100);
+  --color-text-muted: var(--p-night-300);
+  --color-accent: var(--p-blue-400);
+  --color-on-accent: var(--p-blue-950);
+  --color-focus: var(--p-blue-300);
+  --color-danger: var(--p-red-300);
+}
+
+/* ---------- 3. Component: per-component hooks ---------- */
+:root {
+  /* Popup frame */
+  --popup-bg: var(--color-surface);
+  --popup-fg: var(--color-text);
+  --popup-radius: var(--radius-container);
+  --popup-shadow: var(--p-shadow-popup);
+  --popup-header-bg: var(--color-surface-header);
+  --popup-header-px: var(--space-md);
+  --popup-header-py: var(--space-sm);
+
+  /* Thread (message list) */
+  --thread-bg: var(--color-surface-sunken);
+  --thread-padding: var(--space-md);
+  --thread-gap: var(--space-sm);
+  --thread-min-height: 120px;
+  --thread-max-height: 300px;
+
+  /* Bubble: mascot (left) and user (right) */
+  --bubble-bot-bg: var(--color-surface-bot);
+  --bubble-bot-border: var(--color-border);
+  --bubble-me-bg: var(--color-accent);
+  --bubble-me-fg: var(--color-on-accent);
+  --bubble-radius: var(--radius-bubble);
+  --bubble-tail-radius: var(--radius-bubble-tail);
+  --bubble-px: var(--space-md);
+  --bubble-py: var(--space-sm);
+  --bubble-max-width: 80%;
+
+  /* Chip (quick reply) and button */
+  --chip-bg: var(--color-surface);
+  --chip-fg: var(--color-text);
+  --chip-border: var(--color-border);
+  --chip-border-hover: var(--color-accent);
+  --chip-bg-on: var(--color-accent);
+  --chip-fg-on: var(--color-on-accent);
+  --chip-radius: var(--radius-control);
+  --chip-height: var(--p-size-control);
+  --chip-px: 14px;
+  --chip-font-size: var(--text-control);
+
+  /* Text input */
+  --input-bg: var(--color-surface);
+  --input-fg: var(--color-text);
+  --input-border: var(--color-border);
+  --input-border-focus: var(--color-focus);
+  --input-placeholder: var(--color-text-muted);
+  --input-height: var(--p-size-control);
+
+  /* Category combobox list */
+  --listbox-bg: var(--color-surface);
+  --listbox-border: var(--color-border);
+  --listbox-shadow: var(--p-shadow-listbox);
+  --listbox-option-active-bg: var(--color-surface-sunken);
+  --listbox-option-active-ring: var(--color-accent);
+
+  /* Focus ring and error text */
+  --focus-ring: 2px solid var(--color-focus);
+  --focus-ring-offset: 2px;
+  --error-fg: var(--color-danger);
+
+  /* Startup and recovery screen */
+  --startup-padding: var(--space-md);
+  --startup-max-width: 520px;
+  --startup-gap: var(--space-sm);
+}
