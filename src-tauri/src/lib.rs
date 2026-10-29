@@ -50,7 +50,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+            if let (WindowEvent::CloseRequested { api, .. }, "main") = (event, window.label()) {
                 api.prevent_close();
                 let _ = window.hide();
             }
