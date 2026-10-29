@@ -3,7 +3,6 @@
 use rusqlite::{Connection, Result};
 use rusqlite_migration::{Migrations, M};
 use serde::Serialize;
-use std::path::Path;
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Category {
@@ -11,7 +10,10 @@ pub struct Category {
     pub name: String,
 }
 
-fn migrations() -> Migrations<'static> {
+/// The schema version that the newest migration creates.
+pub const LATEST_VERSION: i64 = 1;
+
+pub fn migrations() -> Migrations<'static> {
     Migrations::new(vec![M::up(
         "CREATE TABLE category (
             id INTEGER PRIMARY KEY,
@@ -19,16 +21,6 @@ fn migrations() -> Migrations<'static> {
             archived_at INTEGER
         );",
     )])
-}
-
-/// Open the database file and bring it to the newest schema version.
-pub fn open(path: &Path) -> Result<Connection> {
-    let mut conn = Connection::open(path)?;
-    migrations().to_latest(&mut conn).map_err(|e| match e {
-        rusqlite_migration::Error::RusqliteError { err, .. } => err,
-        other => rusqlite::Error::ToSqlConversionFailure(Box::new(other)),
-    })?;
-    Ok(conn)
 }
 
 pub fn add_category(conn: &Connection, name: &str) -> Result<Category> {
@@ -49,7 +41,7 @@ mod tests {
     #[test]
     fn a_category_written_through_the_store_is_read_back() {
         let dir = tempfile::tempdir().unwrap();
-        let conn = open(&dir.path().join("tracker.db")).unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
 
         let added = add_category(&conn, "Project A").unwrap();
 
@@ -59,10 +51,10 @@ mod tests {
     #[test]
     fn the_first_migration_sets_the_schema_version() {
         let dir = tempfile::tempdir().unwrap();
-        let conn = open(&dir.path().join("tracker.db")).unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
 
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
 
-        assert_eq!(version, 1);
+        assert_eq!(version, LATEST_VERSION);
     }
 }
