@@ -42,6 +42,16 @@ fn create_entry(db: State<Db>, entry: store::Entry) -> Result<store::Entry, Stri
 }
 
 #[tauri::command]
+fn update_entry(db: State<Db>, entry: store::Entry) -> Result<(), String> {
+    store::update_entry(&db.0.lock().unwrap(), &entry)
+}
+
+#[tauri::command]
+fn delete_entry(db: State<Db>, id: i64) -> Result<(), String> {
+    store::delete_entry(&db.0.lock().unwrap(), id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn list_entries(db: State<Db>, from_utc: i64, to_utc: i64) -> Result<Vec<store::Entry>, String> {
     store::list_entries(&db.0.lock().unwrap(), from_utc, to_utc).map_err(|e| e.to_string())
 }
@@ -146,6 +156,8 @@ pub fn run() {
             get_settings,
             save_settings,
             create_entry,
+            update_entry,
+            delete_entry,
             list_entries,
             startup_failure,
             start_empty,

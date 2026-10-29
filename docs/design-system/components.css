@@ -173,4 +173,5 @@
   font: var(--text-body) var(--font-body);
 }
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
+.wt-selected { outline: 2px solid var(--calendar-fg); outline-offset: 1px; }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }

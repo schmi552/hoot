@@ -75,3 +75,27 @@ export function nextFreeStart(entries: Span[], dayStartUtc: number, dayEndUtc: n
   const ends = entries.filter((e) => e.startUtc >= dayStartUtc && e.startUtc < dayEndUtc).map((e) => e.endUtc);
   return ends.length ? Math.max(...ends) : fallbackUtc;
 }
+
+export const STEP = 15 * 60;
+
+/** True if `span` overlaps an Entry other than `ignoreId`. Spans that only touch do not overlap. */
+export function overlapsAny(entries: (Span & { id: number })[], span: Span, ignoreId = 0): boolean {
+  return entries.some((e) => e.id !== ignoreId && e.startUtc < span.endUtc && e.endUtc > span.startUtc);
+}
+
+/** The end a resize can reach: at least one step long, and not past the next Entry. */
+export function resizedEnd(entries: (Span & { id: number })[], id: number, wantedEnd: number): number {
+  const self = entries.find((e) => e.id === id)!;
+  const next = Math.min(...entries.filter((e) => e.id !== id && e.startUtc >= self.endUtc).map((e) => e.startUtc));
+  return Math.min(Math.max(wantedEnd, self.startUtc + STEP), next);
+}
+
+/** The first slot of the same length at or after the end of `span` that overlaps no Entry. */
+export function nextFreeSlot(entries: (Span & { id: number })[], span: Span): Span {
+  const len = span.endUtc - span.startUtc;
+  let startUtc = span.endUtc;
+  for (const e of [...entries].sort((a, b) => a.startUtc - b.startUtc)) {
+    if (e.startUtc < startUtc + len && e.endUtc > startUtc) startUtc = e.endUtc;
+  }
+  return { startUtc, endUtc: startUtc + len };
+}

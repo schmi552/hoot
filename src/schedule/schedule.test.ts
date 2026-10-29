@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart } from "./schedule";
+import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, resizedEnd } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -46,4 +46,27 @@ test("a clock time in a zone becomes an instant, and the instant reads back as t
   expect(ymdIn("America/New_York", t)).toEqual({ y: 2026, m: 7, d: 4 });
   expect(ymdIn("Asia/Tokyo", t)).toEqual({ y: 2026, m: 7, d: 4 });
   expect(weekday({ y: 2026, m: 7, d: 4 })).toBe(6);
+});
+
+const e = (id: number, startUtc: number, endUtc: number) => ({ id, startUtc, endUtc });
+const day = [e(1, 1000, 2000), e(2, 2000, 3000), e(3, 3600, 4000)];
+
+test("a move or paste overlaps when it enters another Entry, but not when it only touches or hits itself", () => {
+  expect(overlapsAny(day, { startUtc: 1500, endUtc: 2500 }, 1)).toBe(true);
+  expect(overlapsAny(day, { startUtc: 3000, endUtc: 3600 })).toBe(false);
+  expect(overlapsAny(day, { startUtc: 1100, endUtc: 1900 }, 1)).toBe(false);
+  expect(overlapsAny(day, { startUtc: 1100, endUtc: 1900 })).toBe(true);
+});
+
+test("a resize stops at the next Entry and keeps one step of length", () => {
+  expect(resizedEnd(day, 2, 3500)).toBe(3500);
+  expect(resizedEnd(day, 2, 9000)).toBe(3600);
+  expect(resizedEnd(day, 1, 9000)).toBe(2000);
+  expect(resizedEnd(day, 3, 9000)).toBe(9000);
+  expect(resizedEnd(day, 3, 3000)).toBe(3600 + 900);
+});
+
+test("a duplicate goes into the next free slot after the original", () => {
+  expect(nextFreeSlot(day, { startUtc: 1000, endUtc: 2000 })).toEqual({ startUtc: 4000, endUtc: 5000 });
+  expect(nextFreeSlot(day, { startUtc: 3600, endUtc: 4000 })).toEqual({ startUtc: 4000, endUtc: 4400 });
 });

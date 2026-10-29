@@ -59,6 +59,7 @@ With `prefers-reduced-motion`, all motion stops.
 | Startup screen | `.wt-startup` | Error and recovery screen. Buttons sit in `.wt-startup-actions`. |
 | Week view | `.wt-calendar` | FullCalendar v7 (ADR 0006). `--calendar-*` tokens feed its `--fc-classic-*` variables. |
 | Entry editor | `.wt-editor` | Inline form above the grid: time, Category, description, Save, Cancel. |
+| Selected Entry | `.wt-selected` | Outline on the Entry that the keyboard keys act on. |
 | Short day | `.wt-day-short` | On a day header when logged time is below expected. Turns the "logged / expected" line to the warning colour. |
 | Error line | `.wt-error` | `role="alert"`. Reserve 16 px height so the layout does not jump. |
 

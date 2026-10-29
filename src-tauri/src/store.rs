@@ -120,32 +120,67 @@ pub struct Entry {
     pub tz: String,
 }
 
-/// Save a new Entry. Fails if it is empty or overlaps another Entry. `entry.id` is ignored.
-pub fn create_entry(conn: &Connection, entry: &Entry) -> std::result::Result<Entry, String> {
+/// Check an Entry before it is written: it must not be empty and must not overlap another Entry.
+fn check_free(tx: &Connection, entry: &Entry) -> std::result::Result<(), String> {
     if entry.end_utc <= entry.start_utc {
         return Err("An Entry must end after it starts.".into());
     }
-    // One transaction, so no other writer can add an overlapping Entry between the check and the insert.
-    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)
-        .map_err(|e| e.to_string())?;
     let overlaps: bool = tx
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM entry WHERE start_utc < ?2 AND end_utc > ?1)",
-            [entry.start_utc, entry.end_utc],
+            "SELECT EXISTS(SELECT 1 FROM entry WHERE id != ?3 AND start_utc < ?2 AND end_utc > ?1)",
+            [entry.start_utc, entry.end_utc, entry.id],
             |r| r.get(0),
         )
         .map_err(|e| e.to_string())?;
     if overlaps {
         return Err("This time already has an Entry.".into());
     }
-    tx.execute(
-        "INSERT INTO entry (category_id, description, start_utc, end_utc, tz) VALUES (?1, ?2, ?3, ?4, ?5)",
-        (entry.category_id, &entry.description, entry.start_utc, entry.end_utc, &entry.tz),
-    )
-    .map_err(|e| e.to_string())?;
-    let id = tx.last_insert_rowid();
+    Ok(())
+}
+
+/// Run `f` in one transaction, so no other writer can add an overlapping Entry between the check and the write.
+fn in_tx<T>(conn: &Connection, f: impl FnOnce(&Connection) -> std::result::Result<T, String>) -> std::result::Result<T, String> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let out = f(&tx)?;
     tx.commit().map_err(|e| e.to_string())?;
-    Ok(Entry { id, ..entry.clone() })
+    Ok(out)
+}
+
+/// Save a new Entry. Fails if it is empty or overlaps another Entry. An `entry.id` of 0 gets a new id;
+/// another id is kept, so that undo can bring back a deleted Entry.
+pub fn create_entry(conn: &Connection, entry: &Entry) -> std::result::Result<Entry, String> {
+    in_tx(conn, |tx| {
+        check_free(tx, entry)?;
+        tx.execute(
+            "INSERT INTO entry (id, category_id, description, start_utc, end_utc, tz) VALUES (NULLIF(?1, 0), ?2, ?3, ?4, ?5, ?6)",
+            (entry.id, entry.category_id, &entry.description, entry.start_utc, entry.end_utc, &entry.tz),
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(Entry { id: if entry.id == 0 { tx.last_insert_rowid() } else { entry.id }, ..entry.clone() })
+    })
+}
+
+/// Replace an Entry. Fails if it is empty or overlaps another Entry.
+pub fn update_entry(conn: &Connection, entry: &Entry) -> std::result::Result<(), String> {
+    in_tx(conn, |tx| {
+        check_free(tx, entry)?;
+        let n = tx
+            .execute(
+                "UPDATE entry SET category_id = ?2, description = ?3, start_utc = ?4, end_utc = ?5, tz = ?6 WHERE id = ?1",
+                (entry.id, entry.category_id, &entry.description, entry.start_utc, entry.end_utc, &entry.tz),
+            )
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("This Entry no longer exists.".into());
+        }
+        Ok(())
+    })
+}
+
+/// Delete an Entry. A missing id is not an error.
+pub fn delete_entry(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM entry WHERE id = ?1", [id]).map(|_| ())
 }
 
 /// The Entries that touch [from_utc, to_utc), oldest first.
@@ -277,5 +312,14 @@ mod tests {
         assert_eq!(list_entries(&conn, 0, 10_000).unwrap(), vec![first.clone(), next]);
         assert_eq!(list_entries(&conn, 0, 1000).unwrap(), vec![]);
         assert_eq!(list_entries(&conn, 1999, 2001).unwrap().len(), 2);
+
+        // An Entry can change in place but not into another Entry.
+        let moved = Entry { start_utc: 1100, end_utc: 1900, ..first.clone() };
+        update_entry(&conn, &moved).unwrap();
+        assert!(update_entry(&conn, &Entry { end_utc: 2001, ..moved.clone() }).is_err());
+
+        // Delete, then undo: the Entry comes back with its id.
+        delete_entry(&conn, moved.id).unwrap();
+        assert_eq!(create_entry(&conn, &moved).unwrap().id, moved.id);
     }
 }

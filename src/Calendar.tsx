@@ -8,16 +8,19 @@ import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
 import {
-  dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeStart, parseHM, Span, weekday, ymdIn,
+  dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
 } from "./schedule/schedule";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
 type Category = { id: number; name: string };
 type Slot = { start: Date; end: Date };
+/** One step of the history: `from` becomes `to`. A null side is an Entry that does not exist. */
+type Change = { from: Entry | null; to: Entry | null };
 
 const DEFAULT_MINUTES = 60;
 const SLOT_MINUTES = 30;
+const DAY = 86_400; // shortcut: a day step is 24 hours, so it is an hour off across a DST change; upgrade with instantAt if that matters
 const secs = (d: Date) => d.getTime() / 1000;
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
@@ -31,6 +34,11 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [categoryId, setCategoryId] = useState(0);
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState<Entry | null>(null);
+  const [selected, setSelected] = useState(0);
+  const [notice, setNotice] = useState("");
+  const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
+  const clipboard = useRef<Entry | null>(null);
 
   const [reload, setReload] = useState(0);
   const load = () => setReload((n) => n + 1);
@@ -41,42 +49,124 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     return () => void (stale = true);
   }, [range, reload]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
+  useEffect(() => {
+    const t = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
-  const open = (s: Slot) => {
+  const open = (s: Slot, entry: Entry | null = null) => {
     setSlot(s);
+    setEditing(entry);
     setPicked(null);
-    setCategoryId(categories[0]?.id ?? 0);
-    setDescription("");
+    setCategoryId(entry?.categoryId ?? categories[0]?.id ?? 0);
+    setDescription(entry?.description ?? "");
     setError(categories.length ? "" : "Add a Category in Settings first.");
   };
   const close = () => {
     setSlot(null);
+    setEditing(null);
     calendar.current?.getApi().unselect();
   };
 
-  const save = () =>
-    slot &&
-    invoke("create_entry", {
-      entry: { id: 0, categoryId, description: description.trim(), startUtc: secs(slot.start), endUtc: secs(slot.end), tz: settings.tz },
-    }).then(() => {
-      close();
-      load();
-    }, (e) => setError(String(e)));
+  const apply = ({ from, to }: Change): Promise<Entry | null> =>
+    to
+      ? from
+        ? invoke("update_entry", { entry: to }).then(() => to)
+        : invoke<Entry>("create_entry", { entry: to })
+      : invoke("delete_entry", { id: from!.id }).then(() => null);
 
-  // `N`: at the selected slot, or right after the last Entry of today.
-  const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
-  onKey.current = (e) => {
-    if (e.key.toLowerCase() !== "n" || e.metaKey || e.ctrlKey || e.altKey || slot) return;
-    if ((e.target as HTMLElement).closest("input, select, textarea")) return;
-    e.preventDefault();
-    if (picked) return open({ start: picked, end: new Date(picked.getTime() + DEFAULT_MINUTES * 60_000) });
+  /** Make a change and put it in the history. Rejects with the message of the store. */
+  const commit = (from: Entry | null, to: Entry | null) =>
+    apply({ from, to }).then((done) => {
+      const h = history.current;
+      h.stack.splice(h.at, Infinity, { from, to: done });
+      h.at++;
+      load();
+    });
+  const fail = (e: unknown) => {
+    setNotice(String(e));
+    load(); // puts back what a drag moved on the grid
+  };
+  const act = (from: Entry | null, to: Entry | null) => commit(from, to).catch(fail);
+
+  const travel = (dir: 1 | -1) => {
+    const h = history.current;
+    const c = h.stack[dir > 0 ? h.at : h.at - 1];
+    if (!c) return;
+    apply(dir > 0 ? c : { from: c.to, to: c.from }).then(() => {
+      h.at += dir;
+      load();
+    }, fail);
+  };
+
+  /** Move or resize; a result that overlaps another Entry is refused. */
+  const place = (e: Entry, startUtc: number, endUtc: number) => {
+    if (startUtc === e.startUtc && endUtc === e.endUtc) return load();
+    const to = { ...e, startUtc, endUtc };
+    if (overlapsAny(entries, to, e.id)) return fail("This time already has an Entry.");
+    act(e, to);
+  };
+
+  const save = () => {
+    if (!slot) return;
+    const entry = { ...(editing ?? { id: 0, startUtc: secs(slot.start), endUtc: secs(slot.end), tz: settings.tz }), categoryId, description: description.trim() };
+    commit(editing, entry).then(close, (e) => setError(String(e)));
+  };
+
+  // Where a new Entry goes when no slot is picked: right after the last Entry of today.
+  const defaultStart = () => {
     // Today if it is on screen, else the first day on screen. Days are days in the zone of the settings.
     const nowSec = Date.now() / 1000;
     const day = ymdIn(settings.tz, range && (nowSec < range[0] || nowSec >= range[1]) ? range[0] : nowSec);
     const [from, to] = dayBoundsIn(settings.tz, day);
-    const fallback = instantAt(settings.tz, day, parseHM(settings.workStart));
-    const start = nextFreeStart(entries, from, to, fallback) * 1000;
-    open({ start: new Date(start), end: new Date(start + DEFAULT_MINUTES * 60_000) });
+    return nextFreeStart(entries, from, to, instantAt(settings.tz, day, parseHM(settings.workStart)));
+  };
+  const edit = (e: Entry) => open({ start: new Date(e.startUtc * 1000), end: new Date(e.endUtc * 1000) }, e);
+
+  const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
+  onKey.current = (e) => {
+    if (slot || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    const k = e.key.toLowerCase();
+    const mod = e.metaKey || e.ctrlKey;
+    const keep = () => e.preventDefault();
+    if (k === "n" && !mod) {
+      keep();
+      const start = picked ? secs(picked) : defaultStart();
+      return open({ start: new Date(start * 1000), end: new Date((start + DEFAULT_MINUTES * 60) * 1000) });
+    }
+    if (mod && k === "z") return keep(), travel(e.shiftKey ? 1 : -1);
+    if (mod && k === "v" && clipboard.current) {
+      keep();
+      const c = clipboard.current;
+      const startUtc = picked ? secs(picked) : defaultStart();
+      const to = { ...c, id: 0, startUtc, endUtc: startUtc + c.endUtc - c.startUtc };
+      return overlapsAny(entries, to) ? fail("This time already has an Entry.") : void act(null, to);
+    }
+    if (k === "tab" && (selected || e.target === document.body)) {
+      const i = entries.findIndex((x) => x.id === selected) + (e.shiftKey ? -1 : 1);
+      const next = entries[e.shiftKey && !selected ? entries.length - 1 : i];
+      setSelected(next?.id ?? 0); // past the last Entry the Tab goes on as usual
+      return next && keep();
+    }
+    const sel = entries.find((x) => x.id === selected);
+    if (!sel) return;
+    const dy = k === "arrowdown" ? 1 : k === "arrowup" ? -1 : 0;
+    const dx = k === "arrowright" ? 1 : k === "arrowleft" ? -1 : 0;
+    if (dy || dx) {
+      keep();
+      if (e.shiftKey && dy) return place(sel, sel.startUtc, resizedEnd(entries, sel.id, sel.endUtc + dy * STEP));
+      return place(sel, sel.startUtc + dy * STEP + dx * DAY, sel.endUtc + dy * STEP + dx * DAY);
+    }
+    if (mod && k === "c") clipboard.current = sel;
+    else if (mod && k === "d") {
+      keep();
+      act(null, { ...sel, id: 0, ...nextFreeSlot(entries, sel) });
+    } else if (k === "delete" || k === "backspace") {
+      keep();
+      setSelected(0);
+      act(sel, null);
+    } else if (k === "escape") setSelected(0);
+    else if (k === "enter") edit(sel);
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => onKey.current?.(e);
@@ -91,8 +181,16 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const name = (id: number) => categories.find((c) => c.id === id)?.name ?? "";
 
   return (
-    <main className="wt-calendar">
+    <main
+      className="wt-calendar"
+      onDoubleClick={(e) => {
+        const id = (e.target as HTMLElement).closest<HTMLElement>("[data-id]")?.dataset.id;
+        const entry = entries.find((x) => x.id === Number(id));
+        if (entry) edit(entry);
+      }}
+    >
       <button className="wt-chip" onClick={onSettings}>Settings</button>
+      <p className="wt-error" role="alert">{notice}</p>
       {slot && (
         <form
           className="wt-form wt-editor"
@@ -131,9 +229,20 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         selectable
         selectMirror
         selectOverlap={false}
-        eventOverlap={false}
+        editable
+        eventClick={(i) => setSelected(Number(i.event.id))}
+        eventDidMount={(i) => void (i.el.dataset.id = i.event.id)}
+        eventDrop={(i) => {
+          i.revert(); // the grid follows the saved Entries, not the drag
+          place(entries.find((x) => x.id === Number(i.event.id))!, secs(i.event.start!), secs(i.event.end!));
+        }}
+        eventResize={(i) => {
+          i.revert();
+          const e = entries.find((x) => x.id === Number(i.event.id))!;
+          place(e, e.startUtc, resizedEnd(entries, e.id, secs(i.event.end!)));
+        }}
         selectMinDistance={5}
-        dateClick={(i) => setPicked(i.date)}
+        dateClick={(i) => (setPicked(i.date), setSelected(0))}
         select={(i) => open({ start: i.start, end: i.end })}
         datesSet={(i) => setRange([secs(i.start), secs(i.end)])}
         events={[
@@ -142,6 +251,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             title: `${name(e.categoryId)}: ${e.description}`,
             start: new Date(e.startUtc * 1000),
             end: new Date(e.endUtc * 1000),
+            classNames: e.id === selected ? ["wt-selected"] : [],
           })),
           ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}
