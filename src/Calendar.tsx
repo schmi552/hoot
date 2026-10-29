@@ -231,6 +231,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         selectMirror
         selectOverlap={false}
         editable
+        views={{ dayGridMonth: { editable: false } }} // the month view only shows and navigates
         eventClick={(i) => setSelected(Number(i.event.id))}
         eventDidMount={(i) => void (i.el.dataset.id = i.event.id)}
         eventDrop={(i) => {
@@ -244,15 +245,14 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         }}
         selectMinDistance={5}
         dateClick={(i) => {
-          if (i.view.type === "dayGridMonth") {
-            const api = calendar.current!.getApi();
-            api.changeView("timeGridWeek", i.date); // the day opens in the week view
-            return;
-          }
+          if (i.view.type === "dayGridMonth") return setPicked(null), setSelected(0), i.view.calendar.changeView("timeGridWeek", i.date); // the day opens in the week view
           setPicked(i.date);
           setSelected(0);
         }}
-        select={(i) => (i.view.type === "timeGridWeek" ? open({ start: i.start, end: i.end }) : calendar.current?.getApi().unselect())}
+        select={(i) => {
+          if (i.view.type === "timeGridWeek") open({ start: i.start, end: i.end });
+          else i.view.calendar.unselect(); // a drag across month cells is not an Entry
+        }}
         datesSet={(i) => setRange([secs(i.start), secs(i.end)])}
         events={[
           ...entries.map((e) => ({
