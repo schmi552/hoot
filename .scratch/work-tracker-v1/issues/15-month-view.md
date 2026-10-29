@@ -6,6 +6,6 @@
 
 **Status:** ready-for-agent
 
-- [ ] The month view shows Entries and the "logged / expected" figure in each day cell.
-- [ ] A click on a day opens that day in the week view.
-- [ ] The user can switch between week and month view.
+- [x] The month view shows Entries and the "logged / expected" figure in each day cell.
+- [x] A click on a day opens that day in the week view.
+- [x] The user can switch between week and month view.
