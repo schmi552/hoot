@@ -36,6 +36,16 @@ fn save_settings(db: State<Db>, settings: store::Settings) -> Result<(), String>
     store::save_settings(&db.0.lock().unwrap(), &settings, &safety::today()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn create_entry(db: State<Db>, entry: store::Entry) -> Result<store::Entry, String> {
+    store::create_entry(&db.0.lock().unwrap(), &entry)
+}
+
+#[tauri::command]
+fn list_entries(db: State<Db>, from_utc: i64, to_utc: i64) -> Result<Vec<store::Entry>, String> {
+    store::list_entries(&db.0.lock().unwrap(), from_utc, to_utc).map_err(|e| e.to_string())
+}
+
 fn recovered(app: &AppHandle, conn: rusqlite::Connection) {
     app.manage(Db(Mutex::new(conn)));
     *app.state::<StartupFailure>().0.lock().unwrap() = None;
@@ -135,6 +145,8 @@ pub fn run() {
             remove_category,
             get_settings,
             save_settings,
+            create_entry,
+            list_entries,
             startup_failure,
             start_empty,
             restore_latest_backup,

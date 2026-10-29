@@ -109,6 +109,59 @@ pub fn remove_category(conn: &Connection, id: i64) -> Result<bool> {
     Ok(used)
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Entry {
+    pub id: i64,
+    pub category_id: i64,
+    pub description: String,
+    pub start_utc: i64,
+    pub end_utc: i64,
+    pub tz: String,
+}
+
+/// Save a new Entry. Fails if it is empty or overlaps another Entry. `entry.id` is ignored.
+pub fn create_entry(conn: &Connection, entry: &Entry) -> std::result::Result<Entry, String> {
+    if entry.end_utc <= entry.start_utc {
+        return Err("An Entry must end after it starts.".into());
+    }
+    let overlaps: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM entry WHERE start_utc < ?2 AND end_utc > ?1)",
+            [entry.start_utc, entry.end_utc],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if overlaps {
+        return Err("This time already has an Entry.".into());
+    }
+    conn.execute(
+        "INSERT INTO entry (category_id, description, start_utc, end_utc, tz) VALUES (?1, ?2, ?3, ?4, ?5)",
+        (entry.category_id, &entry.description, entry.start_utc, entry.end_utc, &entry.tz),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(Entry { id: conn.last_insert_rowid(), ..entry.clone() })
+}
+
+/// The Entries that touch [from_utc, to_utc), oldest first.
+pub fn list_entries(conn: &Connection, from_utc: i64, to_utc: i64) -> Result<Vec<Entry>> {
+    conn.prepare(
+        "SELECT id, category_id, description, start_utc, end_utc, tz FROM entry
+         WHERE start_utc < ?2 AND end_utc > ?1 ORDER BY start_utc",
+    )?
+    .query_map([from_utc, to_utc], |r| {
+        Ok(Entry {
+            id: r.get(0)?,
+            category_id: r.get(1)?,
+            description: r.get(2)?,
+            start_utc: r.get(3)?,
+            end_utc: r.get(4)?,
+            tz: r.get(5)?,
+        })
+    })?
+    .collect()
+}
+
 pub fn add_category(conn: &Connection, name: &str) -> Result<Category> {
     conn.execute("INSERT INTO category (name) VALUES (?1)", [name])?;
     Ok(Category { id: conn.last_insert_rowid(), name: name.to_string() })
@@ -196,5 +249,28 @@ mod tests {
         assert_eq!(list_categories(&conn).unwrap(), vec![]);
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM category", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
+    }
+
+    fn entry(category_id: i64, start_utc: i64, end_utc: i64) -> Entry {
+        Entry { id: 0, category_id, description: "work".into(), start_utc, end_utc, tz: "UTC".into() }
+    }
+
+    #[test]
+    fn an_entry_is_saved_and_listed_and_one_that_overlaps_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let c = add_category(&conn, "A").unwrap();
+
+        let first = create_entry(&conn, &entry(c.id, 1000, 2000)).unwrap();
+        // Entries that touch at the edge do not overlap.
+        let next = create_entry(&conn, &entry(c.id, 2000, 3000)).unwrap();
+        for (s, e) in [(1500, 2500), (500, 1001), (1200, 1300), (900, 3100)] {
+            assert!(create_entry(&conn, &entry(c.id, s, e)).is_err(), "{s}-{e}");
+        }
+        assert!(create_entry(&conn, &entry(c.id, 3000, 3000)).is_err());
+
+        assert_eq!(list_entries(&conn, 0, 10_000).unwrap(), vec![first.clone(), next]);
+        assert_eq!(list_entries(&conn, 0, 1000).unwrap(), vec![]);
+        assert_eq!(list_entries(&conn, 1999, 2001).unwrap().len(), 2);
     }
 }

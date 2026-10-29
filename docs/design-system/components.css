@@ -149,3 +149,8 @@
 
 .wt-form { display: grid; gap: var(--space-sm); }
 .wt-row { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; }
+
+/* Week view */
+.wt-calendar { padding: var(--space-md); font: var(--text-body) var(--font-body); color: var(--color-text); }
+.wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
+.wt-day-short .wt-sub { color: var(--color-danger); font-weight: 600; }

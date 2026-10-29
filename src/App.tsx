@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { Calendar } from "./Calendar";
 import { Settings, SettingsForm } from "./Settings";
 import { Failure, StartupScreen } from "./StartupScreen";
 
@@ -31,10 +32,5 @@ function Tracker() {
         }}
       />
     );
-  return (
-    <main>
-      <h1>Work Tracker</h1>
-      <button className="wt-chip" onClick={() => setEditing(true)}>Settings</button>
-    </main>
-  );
+  return <Calendar settings={settings} onSettings={() => setEditing(true)} />;
 }
