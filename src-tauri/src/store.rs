@@ -125,7 +125,10 @@ pub fn create_entry(conn: &Connection, entry: &Entry) -> std::result::Result<Ent
     if entry.end_utc <= entry.start_utc {
         return Err("An Entry must end after it starts.".into());
     }
-    let overlaps: bool = conn
+    // One transaction, so no other writer can add an overlapping Entry between the check and the insert.
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let overlaps: bool = tx
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM entry WHERE start_utc < ?2 AND end_utc > ?1)",
             [entry.start_utc, entry.end_utc],
@@ -135,12 +138,14 @@ pub fn create_entry(conn: &Connection, entry: &Entry) -> std::result::Result<Ent
     if overlaps {
         return Err("This time already has an Entry.".into());
     }
-    conn.execute(
+    tx.execute(
         "INSERT INTO entry (category_id, description, start_utc, end_utc, tz) VALUES (?1, ?2, ?3, ?4, ?5)",
         (entry.category_id, &entry.description, entry.start_utc, entry.end_utc, &entry.tz),
     )
     .map_err(|e| e.to_string())?;
-    Ok(Entry { id: conn.last_insert_rowid(), ..entry.clone() })
+    let id = tx.last_insert_rowid();
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(Entry { id, ..entry.clone() })
 }
 
 /// The Entries that touch [from_utc, to_utc), oldest first.

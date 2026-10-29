@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { expectedMinutes, formatHM, loggedMinutes, minutesBetween, nextFreeStart } from "./schedule";
+import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -29,4 +29,21 @@ test("N starts after the last Entry of the day, or at the fallback on an empty d
   ];
   expect(nextFreeStart(entries, 0, 1_000, 50)).toBe(400);
   expect(nextFreeStart([], 0, 1_000, 50)).toBe(50);
+});
+
+test("a day is bounded by midnight in its own zone, also on a DST day", () => {
+  const hours = ([a, b]: [number, number]) => (b - a) / 3600;
+  expect(hours(dayBoundsIn("Europe/Berlin", { y: 2026, m: 3, d: 28 }))).toBe(24);
+  expect(hours(dayBoundsIn("Europe/Berlin", { y: 2026, m: 3, d: 29 }))).toBe(23);
+  expect(hours(dayBoundsIn("Europe/Berlin", { y: 2026, m: 10, d: 25 }))).toBe(25);
+  // Midnight in Berlin (UTC+1 in January) is 23:00 UTC the evening before.
+  expect(dayBoundsIn("Europe/Berlin", { y: 2026, m: 1, d: 10 })[0]).toBe(Date.UTC(2026, 0, 9, 23) / 1000);
+});
+
+test("a clock time in a zone becomes an instant, and the instant reads back as that day", () => {
+  const t = instantAt("America/New_York", { y: 2026, m: 7, d: 4 }, 9 * 60); // 09:00 at UTC-4
+  expect(t).toBe(Date.UTC(2026, 6, 4, 13) / 1000);
+  expect(ymdIn("America/New_York", t)).toEqual({ y: 2026, m: 7, d: 4 });
+  expect(ymdIn("Asia/Tokyo", t)).toEqual({ y: 2026, m: 7, d: 4 });
+  expect(weekday({ y: 2026, m: 7, d: 4 })).toBe(6);
 });

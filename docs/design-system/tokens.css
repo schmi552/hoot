@@ -165,6 +165,15 @@
   --bubble-py: var(--space-sm);
   --bubble-max-width: 80%;
 
+  /* Calendar (week view). Components.css maps these onto the FullCalendar theme variables. */
+  --calendar-bg: var(--color-surface);
+  --calendar-fg: var(--color-text);
+  --calendar-fg-muted: var(--color-text-muted);
+  --calendar-border: var(--color-border);
+  --calendar-accent: var(--color-accent);
+  --calendar-on-accent: var(--color-on-accent);
+  --calendar-warning: var(--color-danger);
+
   /* Chip (quick reply) and button */
   --chip-bg: var(--color-surface);
   --chip-fg: var(--color-text);

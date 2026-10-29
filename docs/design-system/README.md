@@ -14,7 +14,7 @@ The prototype is throwaway. This folder is the durable copy of its visual decisi
 
 1. **Primitive** (`--p-*`): raw values. They have no meaning. Do not use them in components.
 2. **Semantic** (`--color-*`, `--space-*`, `--radius-*`, `--text-*`): purpose names. The dark theme changes only this layer.
-3. **Component** (`--popup-*`, `--bubble-*`, `--chip-*`, `--input-*`, `--listbox-*`): hooks for one component each.
+3. **Component** (`--popup-*`, `--bubble-*`, `--chip-*`, `--input-*`, `--listbox-*`, `--calendar-*`): hooks for one component each.
 
 Rule: a component reads from its own layer. To restyle one component, change its component tokens.
 To restyle the whole app, change the semantic tokens.
@@ -57,6 +57,9 @@ With `prefers-reduced-motion`, all motion stops.
 | Input | `.wt-input` | Min height 36 px. |
 | Category combobox | `.wt-combo` | List opens upward. The active option has a ring. |
 | Startup screen | `.wt-startup` | Error and recovery screen. Buttons sit in `.wt-startup-actions`. |
+| Week view | `.wt-calendar` | FullCalendar v7 (ADR 0006). `--calendar-*` tokens feed its `--fc-classic-*` variables. |
+| Entry editor | `.wt-editor` | Inline form above the grid: time, Category, description, Save, Cancel. |
+| Short day | `.wt-day-short` | On a day header when logged time is below expected. Turns the "logged / expected" line to the warning colour. |
 | Error line | `.wt-error` | `role="alert"`. Reserve 16 px height so the layout does not jump. |
 
 ## Mascot
@@ -76,7 +79,7 @@ Keep the mascot in the same colors in light and dark themes.
 
 The prototype has no design for these. Decide them before you build the screens:
 
-- Calendar week view and month view (entries, meetings, absences).
+- Calendar month view, and meetings and absences in the week view. The week view with Entries is done.
 - Gap warning box. Variant A used a hard-coded yellow (`#fff4d6`). Variant D has no equivalent. Add a `--color-warning` token when you need one.
 - Success and info colors.
 - Settings and onboarding screens.

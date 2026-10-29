@@ -7,7 +7,9 @@ import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
-import { expectedMinutes, formatHM, loggedMinutes, nextFreeStart, Span } from "./schedule/schedule";
+import {
+  dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeStart, parseHM, Span, weekday, ymdIn,
+} from "./schedule/schedule";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
@@ -15,8 +17,8 @@ type Category = { id: number; name: string };
 type Slot = { start: Date; end: Date };
 
 const DEFAULT_MINUTES = 60;
+const SLOT_MINUTES = 30;
 const secs = (d: Date) => d.getTime() / 1000;
-const dayBounds = (d: Date) => [secs(new Date(d.getFullYear(), d.getMonth(), d.getDate())), secs(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1))] as const;
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
 export function Calendar({ settings, onSettings }: { settings: Settings; onSettings: () => void }) {
@@ -30,8 +32,14 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
-  const load = () => range && invoke<Entry[]>("list_entries", { fromUtc: range[0], toUtc: range[1] }).then(setEntries);
-  useEffect(() => void load(), [range]);
+  const [reload, setReload] = useState(0);
+  const load = () => setReload((n) => n + 1);
+  useEffect(() => {
+    if (!range) return;
+    let stale = false; // a slower answer for an earlier week must not replace the current one
+    invoke<Entry[]>("list_entries", { fromUtc: range[0], toUtc: range[1] }).then((e) => stale || setEntries(e));
+    return () => void (stale = true);
+  }, [range, reload]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
 
   const open = (s: Slot) => {
@@ -62,12 +70,11 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     if ((e.target as HTMLElement).closest("input, select, textarea")) return;
     e.preventDefault();
     if (picked) return open({ start: picked, end: new Date(picked.getTime() + DEFAULT_MINUTES * 60_000) });
-    // Today if it is on screen, else the first day on screen.
-    const now = new Date();
-    const day = range && (secs(now) < range[0] || secs(now) >= range[1]) ? new Date(range[0] * 1000) : now;
-    const [from, to] = dayBounds(day);
-    const [h, m] = settings.workStart.split(":").map(Number);
-    const fallback = secs(new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m));
+    // Today if it is on screen, else the first day on screen. Days are days in the zone of the settings.
+    const nowSec = Date.now() / 1000;
+    const day = ymdIn(settings.tz, range && (nowSec < range[0] || nowSec >= range[1]) ? range[0] : nowSec);
+    const [from, to] = dayBoundsIn(settings.tz, day);
+    const fallback = instantAt(settings.tz, day, parseHM(settings.workStart));
     const start = nextFreeStart(entries, from, to, fallback) * 1000;
     open({ start: new Date(start), end: new Date(start + DEFAULT_MINUTES * 60_000) });
   };
@@ -77,8 +84,10 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  const expected = (d: Date) => (d.getDay() % 6 === 0 ? 0 : expectedMinutes(settings));
-  const logged = (d: Date) => loggedMinutes(entries, ...dayBounds(d));
+  // The header date is the start of the day in the zone of the settings.
+  const dayOf = (d: Date) => ymdIn(settings.tz, secs(d));
+  const expected = (d: Date) => ([0, 6].includes(weekday(dayOf(d))) ? 0 : expectedMinutes(settings));
+  const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
   const name = (id: number) => categories.find((c) => c.id === id)?.name ?? "";
 
   return (
@@ -109,13 +118,14 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       <FullCalendar
         ref={calendar}
         plugins={[timeGridPlugin, interactionPlugin, classicTheme]}
+        timeZone={settings.tz}
         initialView="timeGridWeek"
         headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
         allDaySlot={false}
         firstDay={1}
         nowIndicator
         height="auto"
-        slotDuration="00:30:00"
+        slotDuration={{ minutes: SLOT_MINUTES }}
         snapDuration="00:15:00"
         scrollTime={settings.workStart + ":00"}
         selectable
@@ -133,7 +143,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             start: new Date(e.startUtc * 1000),
             end: new Date(e.endUtc * 1000),
           })),
-          ...(picked ? [{ start: picked, end: new Date(picked.getTime() + 30 * 60_000), display: "background" }] : []),
+          ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}
         dayHeaderContent={(i) => (
           <>

@@ -150,7 +150,27 @@
 .wt-form { display: grid; gap: var(--space-sm); }
 .wt-row { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; }
 
-/* Week view */
-.wt-calendar { padding: var(--space-md); font: var(--text-body) var(--font-body); color: var(--color-text); }
+/* Week view. The --fc-classic-* variables belong to FullCalendar's classic theme. */
+.wt-calendar {
+  --fc-classic-background: var(--calendar-bg);
+  --fc-classic-foreground: var(--calendar-fg);
+  --fc-classic-muted-foreground: var(--calendar-fg-muted);
+  --fc-classic-faint-foreground: var(--calendar-fg-muted);
+  --fc-classic-border: var(--calendar-border);
+  --fc-classic-strong-border: var(--calendar-border);
+  --fc-classic-primary: var(--calendar-accent);
+  --fc-classic-primary-foreground: var(--calendar-on-accent);
+  --fc-classic-button: var(--calendar-accent);
+  --fc-classic-button-border: var(--calendar-accent);
+  --fc-classic-button-strong: var(--calendar-accent);
+  --fc-classic-button-strong-border: var(--calendar-accent);
+  --fc-classic-button-foreground: var(--calendar-on-accent);
+  --fc-classic-background-event: var(--calendar-accent);
+  --fc-classic-now: var(--calendar-warning);
+  padding: var(--space-md);
+  background: var(--calendar-bg);
+  color: var(--calendar-fg);
+  font: var(--text-body) var(--font-body);
+}
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
-.wt-day-short .wt-sub { color: var(--color-danger); font-weight: 600; }
+.wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }
