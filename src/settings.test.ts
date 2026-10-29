@@ -7,3 +7,4 @@ test("good settings have no problem", () => expect(validate(ok)).toBe(""));
 test("work must end after it starts", () => expect(validate({ ...ok, workEnd: "08:00" })).not.toBe(""));
 test("lunch must be inside work hours", () => expect(validate({ ...ok, lunchEnd: "18:00" })).not.toBe(""));
 test("the interval must be positive", () => expect(validate({ ...ok, intervalMinutes: 0 })).not.toBe(""));
+test("the interval must be a whole number", () => expect(validate({ ...ok, intervalMinutes: 1.5 })).not.toBe(""));

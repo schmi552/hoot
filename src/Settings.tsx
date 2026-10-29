@@ -25,7 +25,7 @@ export function validate(s: Settings): string {
   if (s.workEnd <= s.workStart) return "Work must end after it starts.";
   if (s.lunchEnd <= s.lunchStart) return "Lunch must end after it starts.";
   if (s.lunchStart < s.workStart || s.lunchEnd > s.workEnd) return "Lunch must be inside work hours.";
-  if (!(s.intervalMinutes >= 1)) return "The interval must be at least 1 minute.";
+  if (!Number.isInteger(s.intervalMinutes) || s.intervalMinutes < 1) return "The interval must be a whole number of minutes, at least 1.";
   return "";
 }
 
@@ -103,11 +103,9 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
         />
         <button className="wt-chip" onClick={add} disabled={!name.trim()}>Add Category</button>
       </div>
-      <p className="wt-error">{message}</p>
+      <p className="wt-error" role="alert">{message}</p>
 
-      {saved && (
-        <button className="wt-chip" onClick={() => invoke("show_backups_folder")}>Show backups folder</button>
-      )}
+      <button className="wt-chip" onClick={() => invoke("show_backups_folder")}>Show backups folder</button>
     </main>
   );
 }
