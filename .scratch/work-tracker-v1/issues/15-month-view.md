@@ -4,7 +4,7 @@
 
 **Blocked by:** 13 Entries in the week view
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The month view shows Entries and the "logged / expected" figure in each day cell.
 - [x] A click on a day opens that day in the week view.
