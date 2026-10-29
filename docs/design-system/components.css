@@ -146,3 +146,6 @@
 }
 .wt-startup pre { white-space: pre-wrap; }
 .wt-startup-actions { display: flex; flex-wrap: wrap; gap: var(--startup-gap); }
+
+.wt-form { display: grid; gap: var(--space-sm); }
+.wt-row { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; }

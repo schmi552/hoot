@@ -1,8 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { Settings, SettingsForm } from "./Settings";
 import { Failure, StartupScreen } from "./StartupScreen";
-
-type Category = { id: number; name: string };
 
 export function App() {
   const [failure, setFailure] = useState<Failure | null | undefined>(undefined);
@@ -14,29 +13,28 @@ export function App() {
   return <Tracker />;
 }
 
+/** Shows the setup form until settings exist. Then the app, with Settings one click away. */
 function Tracker() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [name, setName] = useState("");
+  const [settings, setSettings] = useState<Settings | null | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
+  const load = () => invoke<Settings | null>("get_settings").then(setSettings);
+  useEffect(() => void load(), []);
 
-  const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
-  useEffect(() => void refresh(), []);
-
-  const add = async () => {
-    await invoke("add_category", { name });
-    setName("");
-    refresh();
-  };
-
+  if (settings === undefined) return null;
+  if (settings === null || editing)
+    return (
+      <SettingsForm
+        saved={settings}
+        onSaved={() => {
+          setEditing(false);
+          load();
+        }}
+      />
+    );
   return (
     <main>
       <h1>Work Tracker</h1>
-      <input value={name} onChange={(e) => setName(e.target.value)} />
-      <button onClick={add} disabled={!name}>Add category</button>
-      <ul>
-        {categories.map((c) => (
-          <li key={c.id}>{c.name}</li>
-        ))}
-      </ul>
+      <button className="wt-chip" onClick={() => setEditing(true)}>Settings</button>
     </main>
   );
 }

@@ -21,6 +21,21 @@ fn list_categories(db: State<Db>) -> Result<Vec<store::Category>, String> {
     store::list_categories(&db.0.lock().unwrap()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn remove_category(db: State<Db>, id: i64) -> Result<bool, String> {
+    store::remove_category(&db.0.lock().unwrap(), id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_settings(db: State<Db>) -> Result<Option<store::Settings>, String> {
+    store::settings_on(&db.0.lock().unwrap(), &safety::today()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_settings(db: State<Db>, settings: store::Settings) -> Result<(), String> {
+    store::save_settings(&db.0.lock().unwrap(), &settings, &safety::today()).map_err(|e| e.to_string())
+}
+
 fn recovered(app: &AppHandle, conn: rusqlite::Connection) {
     app.manage(Db(Mutex::new(conn)));
     *app.state::<StartupFailure>().0.lock().unwrap() = None;
@@ -117,6 +132,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             add_category,
             list_categories,
+            remove_category,
+            get_settings,
+            save_settings,
             startup_failure,
             start_empty,
             restore_latest_backup,

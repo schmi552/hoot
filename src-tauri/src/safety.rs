@@ -49,7 +49,7 @@ fn sql<T: rusqlite::types::FromSql>(query: &str, params: impl rusqlite::Params) 
     Connection::open_in_memory().unwrap().query_row(query, params, |r| r.get(0)).unwrap()
 }
 
-fn today() -> String {
+pub fn today() -> String {
     sql("SELECT date('now', 'localtime')", [])
 }
 
@@ -183,9 +183,15 @@ mod tests {
     /// A database at version 1 with one category.
     fn dir_with_data() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
-        let conn = open_safely(dir.path()).unwrap();
+        let conn = open_with(dir.path(), &first_migration(), 1).unwrap();
         store::add_category(&conn, "Project A").unwrap();
         dir
+    }
+
+    fn first_migration() -> Migrations<'static> {
+        Migrations::new(vec![M::up(
+            "CREATE TABLE category (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, archived_at INTEGER);",
+        )])
     }
 
     fn two_migrations(second: &'static str) -> Migrations<'static> {
