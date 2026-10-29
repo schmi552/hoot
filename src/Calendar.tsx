@@ -103,8 +103,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           }}
         >
           <span className="wt-sub">
-            {slot.start.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
-            {slot.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {slot.start.toLocaleString([], { timeZone: settings.tz, weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
+            {slot.end.toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" })}
           </span>
           <select className="wt-input" aria-label="Category" value={categoryId} onChange={(e) => setCategoryId(Number(e.target.value))}>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
