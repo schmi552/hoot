@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import FullCalendar, { CalendarRef } from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
 import classicTheme from "@fullcalendar/react/themes/classic";
 import timeGridPlugin from "@fullcalendar/react/timegrid";
@@ -215,10 +216,10 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       )}
       <FullCalendar
         ref={calendar}
-        plugins={[timeGridPlugin, interactionPlugin, classicTheme]}
+        plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, classicTheme]}
         timeZone={settings.tz}
         initialView="timeGridWeek"
-        headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
+        headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridWeek,dayGridMonth" }}
         allDaySlot={false}
         firstDay={1}
         nowIndicator
@@ -242,8 +243,16 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           place(e, e.startUtc, resizedEnd(entries, e.id, secs(i.event.end!)));
         }}
         selectMinDistance={5}
-        dateClick={(i) => (setPicked(i.date), setSelected(0))}
-        select={(i) => open({ start: i.start, end: i.end })}
+        dateClick={(i) => {
+          if (i.view.type === "dayGridMonth") {
+            const api = calendar.current!.getApi();
+            api.changeView("timeGridWeek", i.date); // the day opens in the week view
+            return;
+          }
+          setPicked(i.date);
+          setSelected(0);
+        }}
+        select={(i) => (i.view.type === "timeGridWeek" ? open({ start: i.start, end: i.end }) : calendar.current?.getApi().unselect())}
         datesSet={(i) => setRange([secs(i.start), secs(i.end)])}
         events={[
           ...entries.map((e) => ({
@@ -261,6 +270,13 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             <div className="wt-sub">{formatHM(logged(i.date))} / {formatHM(expected(i.date))}</div>
           </>
         )}
+        dayCellTopContent={(i) => (
+          <>
+            <div>{i.text}</div>
+            <div className="wt-sub">{formatHM(logged(i.date))} / {formatHM(expected(i.date))}</div>
+          </>
+        )}
+        dayCellClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}
         dayHeaderClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}
       />
     </main>
