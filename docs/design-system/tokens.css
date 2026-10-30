@@ -1,79 +1,116 @@
 /*
- * Work Tracker design tokens.
- * Source: prototype 06, variant D (.scratch/work-tracker-v1/prototypes/06-popup/index.html).
+ * Work Tracker design tokens, v2.
+ * v1 source: prototype 06, variant D. v2 adds the proposals marked "NEW".
  * Three layers: primitive -> semantic -> component.
- * Components use semantic and component tokens only. Never use a primitive or a raw value in a component.
- * Dark theme: follows the system. Override with data-theme="light" or data-theme="dark" on <html>.
+ * Components use semantic and component tokens only.
+ * Theme: follows the system. Set data-theme="light" or "dark" on <html> or on any element to force it.
  */
 
-/* ---------- 1. Primitive: raw values, no meaning ---------- */
+/* ---------- 1. Primitive ---------- */
 :root {
-  /* Neutral */
   --p-white: #fff;
   --p-gray-100: #f1f2f5;
+  --p-gray-200: #e3e6ec; /* NEW: absence hatch, light */
   --p-gray-300: #d9dce3;
   --p-gray-600: #586070;
   --p-ink-900: #14171f;
   --p-night-100: #eceef2;
   --p-night-300: #a3aab8;
   --p-night-500: #363c46;
+  --p-night-550: #262b32; /* NEW: absence hatch, dark */
   --p-night-600: #2a3038;
   --p-night-700: #1d2127;
   --p-night-800: #14171c;
 
-  /* Blue (accent) */
   --p-blue-300: #9db6ff;
   --p-blue-400: #6d92f5;
   --p-blue-600: #2457d6;
   --p-blue-950: #0b1220;
 
-  /* Red (danger) */
   --p-red-300: #ff8a80;
   --p-red-700: #b42318;
 
-  /* Warm (header, mascot) */
   --p-peach-100: #fdeede;
   --p-peach-900: #3a2a1e;
-  --p-orange-500: #e8743b;
-  --p-brown-800: #7a2b0a;
-  --p-black: #111;
+  /* Mascot: Hoot the owl. Same colors in light and dark. */
+  --p-owl-slate: #5b7a8c;
+  --p-owl-belly: #dbe6ec;
+  --p-owl-mark: #9db5c2;
+  --p-owl-eye: #1b1f24;
+  --p-owl-beak: #f0a83a;
 
-  /* Space: 4 px grid */
+  /* NEW: status */
+  --p-amber-100: #fff4d6;
+  --p-amber-300: #f5c56b;
+  --p-amber-800: #8a4b00;
+  --p-amber-950: #3a2e12;
+  --p-green-100: #e3f4e8;
+  --p-green-300: #7fd69b;
+  --p-green-800: #176236;
+  --p-green-950: #15291c;
+
+  /* NEW: Category palette. tint = block fill, solid = border and dot, ink = text on tint. */
+  --p-cat-blue-l-tint: #dcedff;   --p-cat-blue-l-solid: #4687d8;   --p-cat-blue-l-ink: #113d70;
+  --p-cat-blue-d-tint: #1f3654;   --p-cat-blue-d-solid: #75aef5;   --p-cat-blue-d-ink: #daedff;
+  --p-cat-orange-l-tint: #ffe6d6; --p-cat-orange-l-solid: #c56c21; --p-cat-orange-l-ink: #632b00;
+  --p-cat-orange-d-tint: #4d2c15; --p-cat-orange-d-solid: #e5955d; --p-cat-orange-d-ink: #ffe5d2;
+  --p-cat-teal-l-tint: #d2f3f0;   --p-cat-teal-l-solid: #009f99;   --p-cat-teal-l-ink: #004c49;
+  --p-cat-teal-d-tint: #003f3c;   --p-cat-teal-d-solid: #2ac3bb;   --p-cat-teal-d-ink: #cef4f1;
+  --p-cat-purple-l-tint: #f0e6ff; --p-cat-purple-l-solid: #9a6ec9; --p-cat-purple-l-ink: #4a2d66;
+  --p-cat-purple-d-tint: #3d2d4e; --p-cat-purple-d-solid: #bc97e8; --p-cat-purple-d-ink: #f1e5ff;
+  --p-cat-green-l-tint: #dff1db;  --p-cat-green-l-solid: #549a44;  --p-cat-green-l-ink: #1b490f;
+  --p-cat-green-d-tint: #243d1e;  --p-cat-green-d-solid: #81bd74;  --p-cat-green-d-ink: #def2d9;
+  --p-cat-pink-l-tint: #ffe2ee;   --p-cat-pink-l-solid: #c35f92;   --p-cat-pink-l-ink: #622344;
+  --p-cat-pink-d-tint: #4c283a;   --p-cat-pink-d-solid: #e38ab5;   --p-cat-pink-d-ink: #ffe1ef;
+  --p-cat-amber-l-tint: #f6ead1;  --p-cat-amber-l-solid: #ac7d00;  --p-cat-amber-l-ink: #553700;
+  --p-cat-amber-d-tint: #43330a;  --p-cat-amber-d-solid: #cda448;  --p-cat-amber-d-ink: #f8eace;
+  --p-cat-slate-l-tint: #e5ecf3;  --p-cat-slate-l-solid: #798898;  --p-cat-slate-l-ink: #313f4d;
+  --p-cat-slate-d-tint: #30363d;  --p-cat-slate-d-solid: #9dadbe;  --p-cat-slate-d-ink: #e6ecf2;
+
+  /* Space: 4 px grid. 16, 24, 32 are NEW for screens (not for the popup). */
   --p-space-1: 4px;
   --p-space-2: 8px;
   --p-space-3: 12px;
+  --p-space-4: 16px;
+  --p-space-6: 24px;
+  --p-space-8: 32px;
 
-  /* Radius */
   --p-radius-xs: 3px;
+  --p-radius-sm: 6px; /* NEW: promoted from the input and listbox literals */
+  --p-radius-tight: 4px; /* ADDED: keycap, 15-minute block, menu item, label chip */
   --p-radius-md: 10px;
   --p-radius-lg: 14px;
   --p-radius-pill: 99px;
 
-  /* Type */
-  --p-font-sans: system-ui, sans-serif;
-  --p-font-mono: ui-monospace, monospace;
+  --p-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --p-font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+  --p-font-pixel: "Pixelify Sans", ui-monospace, monospace; /* NEW: bundle the woff2 locally in the app (OFL) */
+  --p-text-11: 11px; /* ADDED: label chip, small badge */
   --p-text-12: 12px;
   --p-text-13: 13px;
   --p-text-14: 14px;
+  --p-text-15: 15px; /* ADDED: pixel face in the popup header */
+  --p-text-16: 16px; /* ADDED: pixel face in the toolbar */
+  --p-text-18: 18px; /* NEW */
+  --p-text-24: 24px; /* NEW: pixel display only */
   --p-leading-body: 1.4;
 
-  /* Motion */
   --p-duration-fast: 0.12s;
   --p-duration-enter: 0.18s;
   --p-ease-out: ease-out;
 
-  /* Elevation */
   --p-shadow-popup: 0 10px 40px #000a;
   --p-shadow-listbox: 0 -6px 20px #0003;
+  --p-shadow-menu: 0 6px 20px #0003; /* NEW: menus that open downward */
 
-  /* Size */
   --p-size-control: 36px;
-  --p-size-pixel-sm: 3px; /* mascot pixel, popup */
-  --p-size-pixel-md: 5px; /* mascot pixel, onboarding or empty state */
+  --p-size-pixel-sm: 3px;
+  --p-size-pixel-md: 5px;
+  --p-size-hour: 64px; /* NEW: one hour in the week grid; 15 min = 16 px */
 }
 
-/* ---------- 2. Semantic: purpose, theme-aware ---------- */
-:root {
+/* ---------- 2. Semantic: light ---------- */
+:root, [data-theme="light"] {
   --color-surface: var(--p-white);
   --color-surface-sunken: var(--p-gray-100);
   --color-surface-header: var(--p-peach-100);
@@ -85,27 +122,60 @@
   --color-on-accent: var(--p-white);
   --color-focus: var(--p-blue-600);
   --color-danger: var(--p-red-700);
+  --color-warning-fg: var(--p-amber-800);
+  --color-warning-bg: var(--p-amber-100);
+  --color-success-fg: var(--p-green-800);
+  --color-success-bg: var(--p-green-100);
+  --color-hatch: var(--p-gray-200);
 
-  --color-mascot-body: var(--p-orange-500);
-  --color-mascot-eye: var(--p-black);
-  --color-mascot-mouth: var(--p-brown-800);
+  --cat-1-tint: var(--p-cat-blue-l-tint);   --cat-1-solid: var(--p-cat-blue-l-solid);   --cat-1-ink: var(--p-cat-blue-l-ink);
+  --cat-2-tint: var(--p-cat-orange-l-tint); --cat-2-solid: var(--p-cat-orange-l-solid); --cat-2-ink: var(--p-cat-orange-l-ink);
+  --cat-3-tint: var(--p-cat-teal-l-tint);   --cat-3-solid: var(--p-cat-teal-l-solid);   --cat-3-ink: var(--p-cat-teal-l-ink);
+  --cat-4-tint: var(--p-cat-purple-l-tint); --cat-4-solid: var(--p-cat-purple-l-solid); --cat-4-ink: var(--p-cat-purple-l-ink);
+  --cat-5-tint: var(--p-cat-green-l-tint);  --cat-5-solid: var(--p-cat-green-l-solid);  --cat-5-ink: var(--p-cat-green-l-ink);
+  --cat-6-tint: var(--p-cat-pink-l-tint);   --cat-6-solid: var(--p-cat-pink-l-solid);   --cat-6-ink: var(--p-cat-pink-l-ink);
+  --cat-7-tint: var(--p-cat-amber-l-tint);  --cat-7-solid: var(--p-cat-amber-l-solid);  --cat-7-ink: var(--p-cat-amber-l-ink);
+  --cat-8-tint: var(--p-cat-slate-l-tint);  --cat-8-solid: var(--p-cat-slate-l-solid);  --cat-8-ink: var(--p-cat-slate-l-ink);
+
+  --color-mascot-body: var(--p-owl-slate);
+  --color-mascot-belly: var(--p-owl-belly);
+  --color-mascot-mark: var(--p-owl-mark);
+  --color-mascot-eye-white: var(--p-white);
+  --color-mascot-eye: var(--p-owl-eye);
+  --color-mascot-beak: var(--p-owl-beak);
 
   --space-xs: var(--p-space-1);
   --space-sm: var(--p-space-2);
   --space-md: var(--p-space-3);
+  --space-lg: var(--p-space-4);
+  --space-xl: var(--p-space-6);
+  --space-2xl: var(--p-space-8);
 
   --radius-container: var(--p-radius-md);
   --radius-bubble: var(--p-radius-lg);
   --radius-bubble-tail: var(--p-radius-xs);
+  --radius-field: var(--p-radius-sm);
+  --radius-key: var(--p-radius-tight);
   --radius-control: var(--p-radius-pill);
 
   --font-body: var(--p-font-sans);
+  --font-mono: var(--p-font-mono);
+  --font-display: var(--p-font-pixel);
+  --motion-fast: var(--p-duration-fast);
+  --motion-enter: var(--p-duration-enter);
+  --motion-ease: var(--p-ease-out);
+  --text-micro: var(--p-text-11);
   --text-caption: var(--p-text-12);
   --text-control: var(--p-text-13);
   --text-body: var(--p-text-14);
+  --text-popup-title: var(--p-text-15);
+  --text-toolbar-title: var(--p-text-16);
+  --text-title: var(--p-text-18);
+  --text-display: var(--p-text-24);
   --leading-body: var(--p-leading-body);
 }
 
+/* ---------- 2. Semantic: dark ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --color-surface: var(--p-night-700);
@@ -119,10 +189,23 @@
     --color-on-accent: var(--p-blue-950);
     --color-focus: var(--p-blue-300);
     --color-danger: var(--p-red-300);
+    --color-warning-fg: var(--p-amber-300);
+    --color-warning-bg: var(--p-amber-950);
+    --color-success-fg: var(--p-green-300);
+    --color-success-bg: var(--p-green-950);
+    --color-hatch: var(--p-night-550);
+    --cat-1-tint: var(--p-cat-blue-d-tint);   --cat-1-solid: var(--p-cat-blue-d-solid);   --cat-1-ink: var(--p-cat-blue-d-ink);
+    --cat-2-tint: var(--p-cat-orange-d-tint); --cat-2-solid: var(--p-cat-orange-d-solid); --cat-2-ink: var(--p-cat-orange-d-ink);
+    --cat-3-tint: var(--p-cat-teal-d-tint);   --cat-3-solid: var(--p-cat-teal-d-solid);   --cat-3-ink: var(--p-cat-teal-d-ink);
+    --cat-4-tint: var(--p-cat-purple-d-tint); --cat-4-solid: var(--p-cat-purple-d-solid); --cat-4-ink: var(--p-cat-purple-d-ink);
+    --cat-5-tint: var(--p-cat-green-d-tint);  --cat-5-solid: var(--p-cat-green-d-solid);  --cat-5-ink: var(--p-cat-green-d-ink);
+    --cat-6-tint: var(--p-cat-pink-d-tint);   --cat-6-solid: var(--p-cat-pink-d-solid);   --cat-6-ink: var(--p-cat-pink-d-ink);
+    --cat-7-tint: var(--p-cat-amber-d-tint);  --cat-7-solid: var(--p-cat-amber-d-solid);  --cat-7-ink: var(--p-cat-amber-d-ink);
+    --cat-8-tint: var(--p-cat-slate-d-tint);  --cat-8-solid: var(--p-cat-slate-d-solid);  --cat-8-ink: var(--p-cat-slate-d-ink);
   }
 }
 
-:root[data-theme="dark"] {
+[data-theme="dark"] {
   --color-surface: var(--p-night-700);
   --color-surface-sunken: var(--p-night-800);
   --color-surface-header: var(--p-peach-900);
@@ -134,11 +217,24 @@
   --color-on-accent: var(--p-blue-950);
   --color-focus: var(--p-blue-300);
   --color-danger: var(--p-red-300);
+  --color-warning-fg: var(--p-amber-300);
+  --color-warning-bg: var(--p-amber-950);
+  --color-success-fg: var(--p-green-300);
+  --color-success-bg: var(--p-green-950);
+  --color-hatch: var(--p-night-550);
+  --cat-1-tint: var(--p-cat-blue-d-tint);   --cat-1-solid: var(--p-cat-blue-d-solid);   --cat-1-ink: var(--p-cat-blue-d-ink);
+  --cat-2-tint: var(--p-cat-orange-d-tint); --cat-2-solid: var(--p-cat-orange-d-solid); --cat-2-ink: var(--p-cat-orange-d-ink);
+  --cat-3-tint: var(--p-cat-teal-d-tint);   --cat-3-solid: var(--p-cat-teal-d-solid);   --cat-3-ink: var(--p-cat-teal-d-ink);
+  --cat-4-tint: var(--p-cat-purple-d-tint); --cat-4-solid: var(--p-cat-purple-d-solid); --cat-4-ink: var(--p-cat-purple-d-ink);
+  --cat-5-tint: var(--p-cat-green-d-tint);  --cat-5-solid: var(--p-cat-green-d-solid);  --cat-5-ink: var(--p-cat-green-d-ink);
+  --cat-6-tint: var(--p-cat-pink-d-tint);   --cat-6-solid: var(--p-cat-pink-d-solid);   --cat-6-ink: var(--p-cat-pink-d-ink);
+  --cat-7-tint: var(--p-cat-amber-d-tint);  --cat-7-solid: var(--p-cat-amber-d-solid);  --cat-7-ink: var(--p-cat-amber-d-ink);
+  --cat-8-tint: var(--p-cat-slate-d-tint);  --cat-8-solid: var(--p-cat-slate-d-solid);  --cat-8-ink: var(--p-cat-slate-d-ink);
 }
 
-/* ---------- 3. Component: per-component hooks ---------- */
-:root {
-  /* Popup frame */
+/* ---------- 3. Component ---------- */
+/* Declared on every themed element too, so a forced theme on a subtree recomputes them. */
+:root, [data-theme] {
   --popup-bg: var(--color-surface);
   --popup-fg: var(--color-text);
   --popup-radius: var(--radius-container);
@@ -147,14 +243,12 @@
   --popup-header-px: var(--space-md);
   --popup-header-py: var(--space-sm);
 
-  /* Thread (message list) */
   --thread-bg: var(--color-surface-sunken);
   --thread-padding: var(--space-md);
   --thread-gap: var(--space-sm);
   --thread-min-height: 120px;
   --thread-max-height: 300px;
 
-  /* Bubble: mascot (left) and user (right) */
   --bubble-bot-bg: var(--color-surface-bot);
   --bubble-bot-border: var(--color-border);
   --bubble-me-bg: var(--color-accent);
@@ -165,49 +259,105 @@
   --bubble-py: var(--space-sm);
   --bubble-max-width: 80%;
 
-  /* Calendar (week view). Components.css maps these onto the FullCalendar theme variables. */
-  --calendar-bg: var(--color-surface);
-  --calendar-fg: var(--color-text);
-  --calendar-fg-muted: var(--color-text-muted);
-  --calendar-border: var(--color-border);
-  --calendar-accent: var(--color-accent);
-  --calendar-on-accent: var(--color-on-accent);
-  --calendar-warning: var(--color-danger);
-
-  /* Chip (quick reply) and button */
   --chip-bg: var(--color-surface);
   --chip-fg: var(--color-text);
   --chip-border: var(--color-border);
   --chip-border-hover: var(--color-accent);
   --chip-bg-on: var(--color-accent);
   --chip-fg-on: var(--color-on-accent);
+  --chip-danger-fg: var(--color-danger); /* NEW */
   --chip-radius: var(--radius-control);
   --chip-height: var(--p-size-control);
   --chip-px: 14px;
   --chip-font-size: var(--text-control);
 
-  /* Text input */
   --input-bg: var(--color-surface);
   --input-fg: var(--color-text);
   --input-border: var(--color-border);
   --input-border-focus: var(--color-focus);
+  --input-border-error: var(--color-danger); /* NEW */
   --input-placeholder: var(--color-text-muted);
   --input-height: var(--p-size-control);
+  --input-radius: var(--radius-field);
 
-  /* Category combobox list */
   --listbox-bg: var(--color-surface);
   --listbox-border: var(--color-border);
+  --listbox-radius: var(--radius-field);
   --listbox-shadow: var(--p-shadow-listbox);
   --listbox-option-active-bg: var(--color-surface-sunken);
   --listbox-option-active-ring: var(--color-accent);
 
-  /* Focus ring and error text */
   --focus-ring: 2px solid var(--color-focus);
   --focus-ring-offset: 2px;
   --error-fg: var(--color-danger);
 
-  /* Startup and recovery screen */
+  /* NEW: notice box (gap warning, export done, info) */
+  --notice-warning-bg: var(--color-warning-bg);
+  --notice-warning-fg: var(--color-warning-fg);
+  --notice-success-bg: var(--color-success-bg);
+  --notice-success-fg: var(--color-success-fg);
+  --notice-info-bg: var(--color-surface-sunken);
+  --notice-info-fg: var(--color-text);
+  --notice-radius: var(--radius-field);
+
+  /* NEW: keycap */
+  --kbd-bg: var(--color-surface-sunken);
+  --kbd-border: var(--color-border);
+  --kbd-fg: var(--color-text);
+
   --startup-padding: var(--space-md);
   --startup-max-width: 520px;
   --startup-gap: var(--space-sm);
+
+  /* Calendar */
+  --calendar-bg: var(--color-surface);
+  --calendar-fg: var(--color-text);
+  --calendar-fg-muted: var(--color-text-muted);
+  --calendar-border: var(--color-border);
+  --calendar-accent: var(--color-accent);
+  --calendar-on-accent: var(--color-on-accent);
+  --calendar-warning: var(--color-warning-fg); /* CHANGED: was --color-danger */
+  --calendar-now: var(--color-danger);         /* NEW: now line */
+  --calendar-today-ring: var(--color-accent);  /* NEW */
+  --calendar-offhours-bg: var(--color-surface-sunken); /* NEW: outside work hours, weekends */
+  --calendar-lunch-bg: var(--color-surface-sunken);    /* NEW */
+  --calendar-hour: var(--p-size-hour);
+
+  /* NEW: event kinds. Set --cat-tint, --cat-solid, --cat-ink on the event from --cat-N-*. */
+  --entry-radius: var(--radius-field);
+  --entry-border-width: 1px;
+  --meeting-border-width: 1.5px;
+  --meeting-border-style: dashed;
+  --meeting-bg: var(--color-surface);
+  --meeting-fg: var(--color-text);
+  --absence-bg: var(--color-surface-sunken);
+  --absence-stripe: var(--color-hatch);
+  --absence-fg: var(--color-text-muted);
+  --absence-label-bg: var(--color-surface);
+  --selected-ring: 2px solid var(--color-text);
+
+  /* NEW: Workday location badge */
+  --location-bg: var(--color-surface-sunken);
+  --location-fg: var(--color-text);
+  --location-border: var(--color-border);
+
+  /* NEW: app shell for screens */
+  --shell-bg: var(--color-surface);
+  --shell-toolbar-bg: var(--color-surface);
+  --shell-sidebar-bg: var(--color-surface-sunken);
+  --shell-section-gap: var(--space-xl);
+  --shell-padding: var(--space-lg);
+
+  /* ADDED: one-off widths from the boards */
+  --popup-width: 380px;
+  --dialog-width: 400px;
+  --dialog-wide-width: 440px;
+  --menu-width: 240px;
+  --month-week-width: 104px;
+  --hour-gutter-width: 56px;
+  --sidebar-width: 260px;
+  --sidebar-narrow-width: 240px;
+
+  /* ADDED: disabled controls */
+  --disabled-opacity: 0.45;
 }

@@ -1,9 +1,21 @@
 /*
- * Work Tracker components for the popup.
- * Needs tokens.css. Uses component tokens only. No raw colors, sizes or radii.
- * Class names use the "wt-" prefix.
+ * Work Tracker components, v2.
+ * Written from the inline styles of the boards in "Work Tracker Design System.html".
+ * The .html board wins over this file. If they differ, change this file.
+ * Needs tokens.css. Components read semantic and component tokens only. No primitive or raw value.
+ * Class names use the "wt-" prefix. Each class has one place in this file.
  */
 
+/* Pixelify Sans is a variable font (400 to 700), packaged locally (OFL). The app works offline. */
+@font-face {
+  font-family: "Pixelify Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("../../src/assets/fonts/PixelifySans.woff2") format("woff2");
+}
+
+/* ---------- Popup ---------- */
 .wt-popup {
   background: var(--popup-bg);
   color: var(--popup-fg);
@@ -20,6 +32,8 @@
   padding: var(--popup-header-py) var(--popup-header-px);
   background: var(--popup-header-bg);
   border-radius: var(--popup-radius) var(--popup-radius) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-popup-title);
 }
 .wt-sub { color: var(--color-text-muted); font-size: var(--text-caption); }
 
@@ -39,7 +53,7 @@
   display: flex;
   gap: var(--space-sm);
   align-items: flex-end;
-  animation: wt-in var(--p-duration-enter) var(--p-ease-out);
+  animation: wt-in var(--motion-enter) var(--motion-ease);
 }
 .wt-bot > .wt-bubble {
   background: var(--bubble-bot-bg);
@@ -51,7 +65,7 @@
   background: var(--bubble-me-bg);
   color: var(--bubble-me-fg);
   border-radius: var(--bubble-radius) var(--bubble-radius) var(--bubble-tail-radius) var(--bubble-radius);
-  animation: wt-in var(--p-duration-enter) var(--p-ease-out);
+  animation: wt-in var(--motion-enter) var(--motion-ease);
 }
 .wt-bubble, .wt-me {
   padding: var(--bubble-py) var(--bubble-px);
@@ -75,6 +89,11 @@
 }
 .wt-label { color: var(--color-text-muted); font-size: var(--text-caption); min-width: 58px; }
 
+/* The popup fills its own window. */
+.wt-popup--window { display: flex; flex-direction: column; height: 100vh; border-radius: 0; }
+.wt-popup--window .wt-thread { flex: 1; max-height: none; }
+
+/* ---------- Controls ---------- */
 .wt-chip {
   min-height: var(--chip-height);
   padding: 0 var(--chip-px);
@@ -85,7 +104,7 @@
   border: 1px solid var(--chip-border);
   border-radius: var(--chip-radius);
   cursor: pointer;
-  transition: background var(--p-duration-fast), border-color var(--p-duration-fast);
+  transition: background var(--motion-fast), border-color var(--motion-fast);
 }
 .wt-chip:hover { border-color: var(--chip-border-hover); }
 .wt-chip[aria-pressed="true"],
@@ -94,6 +113,7 @@
   color: var(--chip-fg-on);
   border-color: var(--chip-bg-on);
 }
+.wt-chip.is-danger { color: var(--chip-danger-fg); }
 
 .wt-input {
   width: 100%;
@@ -103,9 +123,10 @@
   background: var(--input-bg);
   color: var(--input-fg);
   border: 1px solid var(--input-border);
-  border-radius: 6px;
+  border-radius: var(--input-radius);
 }
 .wt-input::placeholder { color: var(--input-placeholder); }
+.wt-input[aria-invalid="true"] { border-color: var(--input-border-error); }
 
 .wt-combo { position: relative; }
 .wt-combo ul {
@@ -117,7 +138,7 @@
   overflow: auto;
   background: var(--listbox-bg);
   border: 1px solid var(--listbox-border);
-  border-radius: 6px;
+  border-radius: var(--listbox-radius);
   box-shadow: var(--listbox-shadow);
   z-index: 5;
 }
@@ -128,16 +149,43 @@
   outline-offset: -1px;
 }
 
+/* Every disabled control: faded, not-allowed cursor, no hover change. */
+.wt-chip:disabled,
+.wt-input:disabled {
+  opacity: var(--disabled-opacity);
+  cursor: not-allowed;
+}
+.wt-chip:disabled:hover { border-color: var(--chip-border); }
+.wt-chip.is-primary:disabled:hover { border-color: var(--chip-bg-on); }
+
 .wt-error { color: var(--error-fg); font-size: var(--text-caption); min-height: 16px; }
 
-.wt-popup :focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.wt-input:focus-visible { outline-offset: 0; border-color: var(--input-border-focus); }
+.wt-notice {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--notice-radius);
+  background: var(--notice-info-bg);
+  color: var(--notice-info-fg);
+  font-size: var(--text-control);
+}
+.wt-notice.is-warning { background: var(--notice-warning-bg); color: var(--notice-warning-fg); }
+.wt-notice.is-success { background: var(--notice-success-bg); color: var(--notice-success-fg); }
 
-@keyframes wt-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) {
-  .wt-popup, .wt-popup * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+.wt-kbd {
+  padding: 0 6px;
+  font: var(--text-micro) var(--font-mono);
+  background: var(--kbd-bg);
+  color: var(--kbd-fg);
+  border: 1px solid var(--kbd-border);
+  border-radius: var(--radius-key);
 }
 
+/* Focus ring: 2 px, offset 2 px. Inputs: offset 0, the border turns to the focus color. */
+.wt-popup :focus-visible,
+.wt-startup :focus-visible,
+.wt-calendar :focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.wt-input:focus-visible { outline-offset: 0; border-color: var(--input-border-focus); }
+
+/* ---------- Screens ---------- */
 .wt-startup {
   padding: var(--startup-padding);
   max-width: var(--startup-max-width);
@@ -150,7 +198,7 @@
 .wt-form { display: grid; gap: var(--space-sm); }
 .wt-row { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; }
 
-/* Week view. The --fc-classic-* variables belong to FullCalendar's classic theme. */
+/* ---------- Week view. The --fc-classic-* variables belong to FullCalendar's classic theme. ---------- */
 .wt-calendar {
   --fc-classic-background: var(--calendar-bg);
   --fc-classic-foreground: var(--calendar-fg);
@@ -166,19 +214,29 @@
   --fc-classic-button-strong-border: var(--calendar-accent);
   --fc-classic-button-foreground: var(--calendar-on-accent);
   --fc-classic-background-event: var(--calendar-accent);
-  --fc-classic-now: var(--calendar-warning);
+  --fc-classic-now: var(--calendar-now);
   padding: var(--space-md);
   background: var(--calendar-bg);
   color: var(--calendar-fg);
   font: var(--text-body) var(--font-body);
 }
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
-.wt-selected { outline: 2px solid var(--calendar-fg); outline-offset: 1px; }
-.wt-meeting { opacity: 0.75; border-style: dashed; }
-.wt-absence { opacity: 0.6; border-style: dotted; filter: grayscale(1); }
+.wt-selected { outline: var(--selected-ring); outline-offset: 1px; }
+.wt-meeting {
+  background: var(--meeting-bg);
+  color: var(--meeting-fg);
+  border: var(--meeting-border-width) var(--meeting-border-style) var(--calendar-accent);
+}
+.wt-absence {
+  background: repeating-linear-gradient(135deg, var(--absence-stripe) 0 3px, var(--absence-bg) 3px 6px);
+  color: var(--absence-fg);
+  border: 1px solid var(--calendar-border);
+}
 .wt-menu { display: inline-flex; gap: var(--space-sm); }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }
 
-/* The popup fills its own window. */
-.wt-popup--window { display: flex; flex-direction: column; height: 100vh; border-radius: 0; }
-.wt-popup--window .wt-thread { flex: 1; max-height: none; }
+/* ---------- Motion ---------- */
+@keyframes wt-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

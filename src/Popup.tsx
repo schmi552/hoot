@@ -317,7 +317,7 @@ export function ErrorLine({ error, retry }: { error: string; retry?: () => void 
 
 /** A line from the mascot. The mascot is a placeholder: a 10 x 9 pixel grid. */
 const SPRITE = ["..xxxxxx..", ".xxxxxxxx.", "xxxxxxxxxx", "xxexxxxexx", "xxxxxxxxxx", "xxxmmmmxxx", ".xxxxxxxx.", ".xxxxxxxx.", ".xx.xx.xx."];
-const PIXEL = { x: "var(--color-mascot-body)", e: "var(--color-mascot-eye)", m: "var(--color-mascot-mouth)" } as Record<string, string>;
+const PIXEL = { x: "var(--color-mascot-body)", e: "var(--color-mascot-eye)", m: "var(--color-mascot-beak)" } as Record<string, string>;
 function Say({ text }: { text: string }) {
   return (
     <div className="wt-bot">
