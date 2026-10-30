@@ -57,7 +57,7 @@
 }
 .wt-bot > .wt-bubble {
   background: var(--bubble-bot-bg);
-  border: 1px solid var(--bubble-bot-border);
+  border: var(--border-width) solid var(--bubble-bot-border);
   border-radius: var(--bubble-radius) var(--bubble-radius) var(--bubble-radius) var(--bubble-tail-radius);
 }
 .wt-me {
@@ -84,10 +84,10 @@
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md) var(--space-md);
-  border-top: 1px solid var(--color-border);
+  border-top: var(--border-width) solid var(--color-border);
   border-radius: 0 0 var(--popup-radius) var(--popup-radius);
 }
-.wt-label { color: var(--color-text-muted); font-size: var(--text-caption); min-width: 58px; }
+.wt-label { color: var(--color-text-muted); font-size: var(--text-caption); min-width: var(--label-min-width); }
 
 /* The popup fills its own window. */
 .wt-popup--window { display: flex; flex-direction: column; height: 100vh; border-radius: 0; }
@@ -101,7 +101,7 @@
   font-size: var(--chip-font-size);
   background: var(--chip-bg);
   color: var(--chip-fg);
-  border: 1px solid var(--chip-border);
+  border: var(--border-width) solid var(--chip-border);
   border-radius: var(--chip-radius);
   cursor: pointer;
   transition: background var(--motion-fast), border-color var(--motion-fast);
@@ -122,7 +122,7 @@
   font: inherit;
   background: var(--input-bg);
   color: var(--input-fg);
-  border: 1px solid var(--input-border);
+  border: var(--border-width) solid var(--input-border);
   border-radius: var(--input-radius);
 }
 .wt-input::placeholder { color: var(--input-placeholder); }
@@ -132,21 +132,21 @@
 .wt-combo ul {
   position: absolute;
   left: 0; right: 0; bottom: 100%;
-  margin: 0 0 2px; padding: 0;
+  margin: 0 0 var(--listbox-gap); padding: 0;
   list-style: none;
-  max-height: 150px;
+  max-height: var(--listbox-max-height);
   overflow: auto;
   background: var(--listbox-bg);
-  border: 1px solid var(--listbox-border);
+  border: var(--border-width) solid var(--listbox-border);
   border-radius: var(--listbox-radius);
   box-shadow: var(--listbox-shadow);
   z-index: 5;
 }
-.wt-combo li { padding: 6px var(--space-sm); cursor: pointer; }
+.wt-combo li { padding: var(--listbox-option-py) var(--space-sm); cursor: pointer; }
 .wt-combo li.is-active {
   background: var(--listbox-option-active-bg);
-  outline: 1px solid var(--listbox-option-active-ring);
-  outline-offset: -1px;
+  outline: var(--border-width) solid var(--listbox-option-active-ring);
+  outline-offset: var(--outline-inset);
 }
 
 /* Every disabled control: faded, not-allowed cursor, no hover change. */
@@ -155,10 +155,17 @@
   opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
+.wt-combo li[aria-disabled="true"],
+.wt-menu [aria-disabled="true"],
+.wt-menu :disabled {
+  opacity: var(--disabled-opacity);
+  cursor: not-allowed;
+}
+.wt-combo li[aria-disabled="true"]:hover { background: transparent; }
 .wt-chip:disabled:hover { border-color: var(--chip-border); }
 .wt-chip.is-primary:disabled:hover { border-color: var(--chip-bg-on); }
 
-.wt-error { color: var(--error-fg); font-size: var(--text-caption); min-height: 16px; }
+.wt-error { color: var(--error-fg); font-size: var(--text-caption); min-height: var(--error-min-height); }
 
 .wt-notice {
   padding: var(--space-sm) var(--space-md);
@@ -171,11 +178,11 @@
 .wt-notice.is-success { background: var(--notice-success-bg); color: var(--notice-success-fg); }
 
 .wt-kbd {
-  padding: 0 6px;
+  padding: 0 var(--kbd-px);
   font: var(--text-micro) var(--font-mono);
   background: var(--kbd-bg);
   color: var(--kbd-fg);
-  border: 1px solid var(--kbd-border);
+  border: var(--border-width) solid var(--kbd-border);
   border-radius: var(--radius-key);
 }
 
@@ -221,22 +228,22 @@
   font: var(--text-body) var(--font-body);
 }
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
-.wt-selected { outline: var(--selected-ring); outline-offset: 1px; }
+.wt-selected { outline: var(--selected-ring); outline-offset: var(--selected-ring-offset); }
 .wt-meeting {
   background: var(--meeting-bg);
   color: var(--meeting-fg);
   border: var(--meeting-border-width) var(--meeting-border-style) var(--calendar-accent);
 }
 .wt-absence {
-  background: repeating-linear-gradient(135deg, var(--absence-stripe) 0 3px, var(--absence-bg) 3px 6px);
+  background: repeating-linear-gradient(135deg, var(--absence-stripe) 0 var(--hatch-width), var(--absence-bg) var(--hatch-width) calc(2 * var(--hatch-width)));
   color: var(--absence-fg);
-  border: 1px solid var(--calendar-border);
+  border: var(--border-width) solid var(--calendar-border);
 }
 .wt-menu { display: inline-flex; gap: var(--space-sm); }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }
 
 /* ---------- Motion ---------- */
-@keyframes wt-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes wt-in { from { opacity: 0; transform: translateY(var(--enter-offset)); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

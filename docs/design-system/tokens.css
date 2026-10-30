@@ -358,6 +358,19 @@
   --sidebar-width: 260px;
   --sidebar-narrow-width: 240px;
 
+  /* ADDED: sizes that components.css used as literals */
+  --border-width: 1px;
+  --label-min-width: 58px;
+  --error-min-height: 16px;
+  --listbox-max-height: 150px;
+  --listbox-gap: 2px;
+  --listbox-option-py: 6px;
+  --kbd-px: 6px;
+  --enter-offset: 6px;
+  --hatch-width: 3px;
+  --outline-inset: -1px;
+  --selected-ring-offset: 1px;
+
   /* ADDED: disabled controls */
   --disabled-opacity: 0.45;
 }
