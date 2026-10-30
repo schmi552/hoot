@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import { dateKey, popupDue, recentEntries, Span, ymdIn } from "./schedule/schedule";
+import { KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
 type Category = { id: number; name: string };
-type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[]; today: string; askLocation: boolean };
+type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[]; today: string; askLocation: boolean; gap: boolean; previous: Entry | null };
 type Line = { me: boolean; text: string };
 
 const SNOOZE_MINUTES = 5;
@@ -37,13 +37,15 @@ export function Popup() {
       const settings = await invoke<Settings | null>("get_settings");
       if (!settings) return;
       const entries = await invoke<Entry[]>("list_entries", { fromUtc: nowUtc - HISTORY_DAYS * 86_400, toUtc: nowUtc });
-      const spans = popupDue(settings, nowUtc, entries, lastPrompt.current) ?? (force ? [{ startUtc: nowUtc - settings.intervalMinutes * 60, endUtc: nowUtc }] : null);
+      const gapSpans = gapDue(settings, nowUtc, entries, lastPrompt.current);
+      const spans = gapSpans ?? popupDue(settings, nowUtc, entries, lastPrompt.current) ?? (force ? [{ startUtc: nowUtc - settings.intervalMinutes * 60, endUtc: nowUtc }] : null);
       if (!spans || asking.current) return;
       const categories = await invoke<Category[]>("list_categories");
       const last = entries.filter((e) => e.endUtc === spans[0].startUtc)[0] ?? null; // only an Entry that touches the span can be extended
       const today = dateKey(ymdIn(settings.tz, nowUtc));
       const askLocation = !(await invoke<unknown[]>("list_workday_locations", { from: today, to: today })).length; // the first popup of the day
-      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation });
+      const previous = entries.filter((e) => e.endUtc <= spans[0].startUtc).sort((a, b) => b.endUtc - a.endUtc)[0] ?? null;
+      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation, gap: !!gapSpans, previous });
     };
     const unlisten = listen<{ nowUtc: number }>("tick", ({ payload }) => check(payload.nowUtc));
     const debug = listen("debug-popup", () => check(Math.floor(Date.now() / 1000), true));
@@ -52,7 +54,7 @@ export function Popup() {
   }, []);
 
   if (!ask) return null;
-  return <Chat key={ask.now} ask={ask} onDone={finish} />;
+  return ask.gap ? <GapChat key={ask.now} ask={ask} onDone={finish} /> : <Chat key={ask.now} ask={ask} onDone={finish} />;
 }
 
 function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void }) {
@@ -167,6 +169,116 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
   );
 }
 
+type Part = { until: string; description: string; categoryId: number }; // `until` is "HH:MM"; the last part has none
+
+/** The popup for a Gap: accept it as one Entry, split it into parts, or leave it empty. Nothing is saved until the user answers. */
+function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void }) {
+  const { now, settings, spans, previous, recents, categories } = ask;
+  const [mode, setMode] = useState<"choose" | "accept" | "split">("choose");
+  const firstCategory = recents[0]?.categoryId ?? categories[0]?.id ?? 0;
+  const blank = (): Part => ({ until: "", description: "", categoryId: firstCategory });
+  const [parts, setParts] = useState<Part[]>([blank()]);
+  const [error, setError] = useState(categories.length ? "" : "Add a Category in Settings first.");
+  const [saved, setSaved] = useState(false);
+  const written = useRef(0); // Entries already stored, so a retry after a failure does not store them twice
+  const time = (t: number) => new Date(t * 1000).toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" });
+  const start = spans[0].startUtc;
+  const end = spans[spans.length - 1].endUtc;
+  const minutes = minutesBetween(start, end) - spans.slice(1).reduce((sum, p, i) => sum + minutesBetween(spans[i].endUtc, p.startUtc), 0);
+  const ymd = ymdIn(settings.tz, now);
+
+  const choose = (m: "accept" | "split") => {
+    setMode(m);
+    setParts(m === "accept" ? [blank()] : [blank(), blank()]);
+  };
+  const change = (i: number, p: Partial<Part>) => setParts((all) => all.map((x, j) => (j === i ? { ...x, ...p } : x)));
+
+  const save = async () => {
+    const cuts = parts.slice(0, -1).map((p) => (p.until ? instantAt(settings.tz, ymd, parseHM(p.until)) : NaN));
+    if (cuts.some((c, i) => !(c > (cuts[i - 1] ?? start) && c < end))) return setError("Split times must rise and stay inside the Gap.");
+    const split = splitGap(spans, cuts);
+    const pieces = split.flatMap((ss, i) => ss.map((s) => ({ ...parts[i], ...s })));
+    if (split.some((ss) => !ss.length)) return setError("A part must hold work time.");
+    if (parts.some((p) => !p.description.trim())) return setError("Type what you did in every part.");
+    if (parts.some((p) => !p.categoryId)) return setError("Pick a Category for every part.");
+    try {
+      for (; written.current < pieces.length; written.current++) {
+        const p = pieces[written.current];
+        await invoke("create_entry", { entry: { id: 0, categoryId: p.categoryId, description: p.description.trim(), startUtc: p.startUtc, endUtc: p.endUtc, tz: settings.tz } });
+      }
+    } catch (e) {
+      return setError(String(e));
+    }
+    emit("entries-changed");
+    setError("");
+    setSaved(true);
+    setTimeout(() => onDone(now), 1200);
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") onDone(now);
+    else if (mode === "choose" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === "a") choose("accept");
+      else if (k === "s") choose("split");
+      else if (k === "l") onDone(now);
+    } else if (mode !== "choose" && e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") save();
+  };
+
+  return (
+    <div className="wt-popup wt-popup--window" role="dialog" aria-label="Work Tracker gap" tabIndex={0} autoFocus onKeyDown={onKeyDown}>
+      <div className="wt-head">
+        <b>Work Tracker</b>
+        <span className="wt-sub">{time(now)} · Esc skip</span>
+      </div>
+      <div className="wt-thread" role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
+        <Say text={`Nothing is logged from ${time(start)} to ${time(end)} (${formatHM(minutes)}). What did you do?`} />
+        {saved && <Say text="Saved. See you next time!" />}
+      </div>
+      {mode === "choose" && (
+        <div className="wt-quick" role="group" aria-label="Gap choices">
+          <button type="button" autoFocus className="wt-chip is-primary" onClick={() => choose("accept")}>Accept as one Entry (A)</button>
+          <button type="button" className="wt-chip" onClick={() => choose("split")}>Split (S)</button>
+          <button type="button" className="wt-chip" onClick={() => onDone(now)}>Leave empty (L)</button>
+          {previous && (
+            <button type="button" className="wt-chip" title={`Previous Entry, ${categories.find((c) => c.id === previous.categoryId)?.name}`} onClick={() => { setMode("accept"); setParts([{ until: "", description: previous.description, categoryId: previous.categoryId }]); }}>
+              Previous: {previous.description}
+            </button>
+          )}
+        </div>
+      )}
+      {mode !== "choose" && !saved && (
+        <div className="wt-composer">
+          {parts.map((p, i) => (
+            <div key={i}>
+              {mode === "split" && (
+                <div className="wt-row">
+                  <span className="wt-label">Part {i + 1}</span>
+                  {i < parts.length - 1 ? (
+                    <><span className="wt-label">until</span><input className="wt-input" type="time" aria-label={`Part ${i + 1} ends at`} value={p.until} onChange={(e) => change(i, { until: e.target.value })} /></>
+                  ) : <span className="wt-label">until {time(end)}</span>}
+                </div>
+              )}
+              <div className="wt-row">
+                <span className="wt-label">Category</span>
+                <div style={{ flex: 1 }}><Combo options={categories} value={p.categoryId} onChange={(categoryId) => change(i, { categoryId })} /></div>
+              </div>
+              <div className="wt-row">
+                <input autoFocus={i === 0} className="wt-input" aria-label={`What did you do${mode === "split" ? `, part ${i + 1}` : ""}`} placeholder="What did you do?" value={p.description} onChange={(e) => change(i, { description: e.target.value })} />
+              </div>
+            </div>
+          ))}
+          <div className="wt-row">
+            {mode === "split" && <button type="button" className="wt-chip" onClick={() => setParts((all) => [...all.slice(0, -1), blank(), all[all.length - 1]])}>Add part</button>}
+            <button type="button" className="wt-chip is-primary" onClick={save}>Save</button>
+          </div>
+          <div className="wt-error" role="alert">{error}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A line from the mascot. The mascot is a placeholder: a 10 x 9 pixel grid. */
 const SPRITE = ["..xxxxxx..", ".xxxxxxxx.", "xxxxxxxxxx", "xxexxxxexx", "xxxxxxxxxx", "xxxmmmmxxx", ".xxxxxxxx.", ".xxxxxxxx.", ".xx.xx.xx."];
 const PIXEL = { x: "var(--color-mascot-body)", e: "var(--color-mascot-eye)", m: "var(--color-mascot-mouth)" } as Record<string, string>;
@@ -184,6 +296,7 @@ function Say({ text }: { text: string }) {
 /** A Category field that holds the chosen Category. Its list opens upward. */
 function Combo({ options, value, onChange }: { options: Category[]; value: number; onChange: (id: number) => void }) {
   const name = options.find((o) => o.id === value)?.name ?? "";
+  const id = useId();
   const [text, setText] = useState(name);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -200,10 +313,10 @@ function Combo({ options, value, onChange }: { options: Category[]; value: numbe
   };
   return (
     <div className="wt-combo">
-      <input className="wt-input" role="combobox" aria-label="Category" aria-expanded={open} aria-controls="categories" aria-autocomplete="list" placeholder="Category (type to filter)"
+      <input className="wt-input" role="combobox" aria-label="Category" aria-expanded={open} aria-controls={id} aria-autocomplete="list" placeholder="Category (type to filter)"
         value={text} onChange={(e) => { setText(e.target.value); setActive(0); setOpen(true); }} onBlur={() => { setOpen(false); setText(name); }} onKeyDown={onKeyDown} />
       {open && shown.length > 0 && (
-        <ul id="categories" role="listbox">
+        <ul id={id} role="listbox">
           {shown.map((o, i) => (
             <li key={o.id} role="option" aria-selected={i === active} className={i === active ? "is-active" : ""} onMouseDown={(e) => { e.preventDefault(); pick(o); }}>{o.name}</li>
           ))}

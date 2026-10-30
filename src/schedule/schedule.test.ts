@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, popupDue, popupSpans, recentEntries, resizedEnd } from "./schedule";
+import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, splitGap, recentEntries, resizedEnd } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -129,4 +129,37 @@ test("recent Entries are the last three different ones, newest first", () => {
 
 test("no popup while an Entry covers the present", () => {
   expect(popupDue(hours, at(11), [span(9, 10), span(10, 12)], 0)).toBeNull();
+});
+
+const gapSettings = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 30 };
+const t = (h: number, m = 0) => Date.UTC(2026, 9, 28, h, m) / 1000; // Wednesday
+
+test("a Gap starts at the later of the last Entry end and the last popup, and lunch is cut out", () => {
+  const entries = [{ startUtc: t(9), endUtc: t(10) }];
+  expect(gapDue(gapSettings, t(11), entries, 0)).toEqual([{ startUtc: t(10), endUtc: t(11) }]);
+  expect(gapDue(gapSettings, t(11), entries, t(10, 15))).toEqual([{ startUtc: t(10, 15), endUtc: t(11) }]);
+  expect(gapDue(gapSettings, t(14), entries, 0)).toEqual([{ startUtc: t(10), endUtc: t(12) }, { startUtc: t(13), endUtc: t(14) }]);
+});
+
+test("no Gap when it is not longer than the interval plus the margin, or when no work goes on", () => {
+  const entries = [{ startUtc: t(9), endUtc: t(10) }];
+  expect(gapDue(gapSettings, t(10, 35), entries, 0)).toBeNull();
+  expect(gapDue(gapSettings, t(10, 36), entries, 0)).not.toBeNull();
+  expect(gapDue(gapSettings, t(12, 30), entries, 0)).toBeNull(); // lunch
+  expect(gapDue(gapSettings, t(18), entries, 0)).toBeNull(); // after work
+});
+
+test("only the current workday makes a Gap", () => {
+  const friday = [{ startUtc: Date.UTC(2026, 9, 23, 9) / 1000, endUtc: Date.UTC(2026, 9, 23, 10) / 1000 }];
+  expect(gapDue(gapSettings, t(11), friday, 0)).toEqual([{ startUtc: t(9), endUtc: t(11) }]);
+});
+
+test("a Gap splits at the given times and lunch stays out of the parts", () => {
+  const spans = [{ startUtc: t(10), endUtc: t(12) }, { startUtc: t(13), endUtc: t(14) }];
+  expect(splitGap(spans, [t(11), t(13, 30)])).toEqual([
+    [{ startUtc: t(10), endUtc: t(11) }],
+    [{ startUtc: t(11), endUtc: t(12) }, { startUtc: t(13), endUtc: t(13, 30) }],
+    [{ startUtc: t(13, 30), endUtc: t(14) }],
+  ]);
+  expect(splitGap(spans, [t(12, 30)])[1]).toEqual([{ startUtc: t(13), endUtc: t(14) }]);
 });

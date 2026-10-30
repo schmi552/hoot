@@ -116,13 +116,37 @@ export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number): Span[]
     .filter((p) => p.endUtc > p.startUtc);
 }
 
+const lastEndBefore = (entries: Span[], nowUtc: number) => Math.max(0, ...entries.filter((e) => e.endUtc <= nowUtc).map((e) => e.endUtc));
+
+/** A Gap must be longer than the popup interval by more than this, so a late tick is not a Gap. */
+export const GAP_MARGIN_MINUTES = 5;
+
+/**
+ * The Gap at `nowUtc`, or null. It starts at the later of the last Entry end and the last answered or skipped popup,
+ * has lunch and time outside work hours cut out, and shows only while work goes on and only for the current workday.
+ */
+export function gapDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number): Span[] | null {
+  if (!popupDue(s, nowUtc, entries, lastPromptUtc)) return null;
+  const spans = popupSpans(s, Math.max(lastEndBefore(entries, nowUtc), lastPromptUtc), nowUtc);
+  const seconds = spans.reduce((sum, p) => sum + p.endUtc - p.startUtc, 0);
+  return seconds > (s.intervalMinutes + GAP_MARGIN_MINUTES) * 60 ? spans : null;
+}
+
+/** Cuts the work time `spans` of a Gap at the instants `cutsUtc` (ascending) into one list of spans per part. A part inside lunch is empty. */
+export function splitGap(spans: Span[], cutsUtc: number[]): Span[][] {
+  const edges = [-Infinity, ...cutsUtc, Infinity];
+  return edges.slice(1).map((end, i) =>
+    spans.map((p) => ({ startUtc: Math.max(p.startUtc, edges[i]), endUtc: Math.min(p.endUtc, end) })).filter((p) => p.endUtc > p.startUtc),
+  );
+}
+
 /**
  * The time a popup at `nowUtc` asks about, or null if no popup is due. A popup is due when a full interval has passed since
  * the last Entry ended, the last popup was answered or skipped (`lastPromptUtc`), or work began today, whichever is latest.
  */
 export function popupDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number): Span[] | null {
   if (entries.some((e) => e.startUtc <= nowUtc && e.endUtc > nowUtc)) return null; // an Entry already covers now
-  const lastEnd = Math.max(0, ...entries.filter((e) => e.endUtc <= nowUtc).map((e) => e.endUtc));
+  const lastEnd = lastEndBefore(entries, nowUtc);
   const workStart = instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(s.workStart));
   if (nowUtc - Math.max(lastEnd, lastPromptUtc, workStart) < s.intervalMinutes * 60) return null;
   const spans = popupSpans(s, lastEnd, nowUtc);
