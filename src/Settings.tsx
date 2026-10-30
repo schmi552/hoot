@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { Appearance, Theme } from "./theme";
 import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
 
 export type Settings = {
@@ -58,6 +59,7 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
+  const [look, setLook] = useState<Appearance>({ theme: "system", showMascot: true });
   const today = dateKey(ymdIn(s.tz, Date.now() / 1000));
   const [from, setFrom] = useState(nextMonday(today));
   const dated = needsStartDate(s, saved);
@@ -65,6 +67,7 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
 
   const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
   useEffect(() => void refresh(), []);
+  useEffect(() => void invoke<Appearance>("get_appearance").then(setLook, fail), []);
   useEffect(() => void isEnabled().then(setAutostart, fail), []);
 
   const set = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -79,6 +82,8 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
   const problem = validate(s, start, today);
   const fail = (e: unknown) => setMessage(String(e));
   const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
+  const setTheme = (theme: Theme) => invoke("set_theme", { theme }).then(() => setLook({ ...look, theme }), fail);
+  const setShowMascot = (showMascot: boolean) => invoke("set_show_mascot", { show: showMascot }).then(() => setLook({ ...look, showMascot }), fail);
   const save = () => invoke("save_settings", { settings: s, start }).then(onSaved, fail);
   const add = () =>
     invoke("add_category", { code: code.trim(), name: name.trim() }).then(() => {
@@ -141,6 +146,19 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
       <label className="wt-row">
         <span className="wt-label">Start at login</span>
         <input type="checkbox" checked={autostart} onChange={(e) => toggleAutostart(e.target.checked)} />
+      </label>
+
+      <label className="wt-row">
+        <span className="wt-label">Theme</span>
+        <select className="wt-input" value={look.theme} onChange={(e) => setTheme(e.target.value as Theme)}>
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <label className="wt-row">
+        <span className="wt-label">Show the mascot</span>
+        <input type="checkbox" checked={look.showMascot} onChange={(e) => setShowMascot(e.target.checked)} />
       </label>
 
       <h2>Categories</h2>

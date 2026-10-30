@@ -544,6 +544,41 @@ pub fn list_workday_locations(conn: &Connection, from: &str, to: &str) -> Result
         .collect()
 }
 
+/// How the app looks. `theme` is "system", "light" or "dark". Stored as `app_setting` keys.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Appearance {
+    pub theme: String,
+    pub show_mascot: bool,
+}
+
+fn app_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    conn.query_row("SELECT value FROM app_setting WHERE key = ?1", [key], |r| r.get(0)).optional()
+}
+
+fn set_app_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute("INSERT OR REPLACE INTO app_setting (key, value) VALUES (?1, ?2)", [key, value]).map(drop)
+}
+
+/// The theme is "system" and the mascot is on until the user changes them.
+pub fn appearance(conn: &Connection) -> Result<Appearance> {
+    Ok(Appearance {
+        theme: app_setting(conn, "theme")?.unwrap_or_else(|| "system".into()),
+        show_mascot: app_setting(conn, "show_mascot")?.is_none_or(|v| v == "true"),
+    })
+}
+
+pub fn set_theme(conn: &Connection, theme: &str) -> std::result::Result<(), String> {
+    if !["system", "light", "dark"].contains(&theme) {
+        return Err(format!("Unknown theme: {theme}"));
+    }
+    set_app_setting(conn, "theme", theme).map_err(|e| e.to_string())
+}
+
+pub fn set_show_mascot(conn: &Connection, show: bool) -> Result<()> {
+    set_app_setting(conn, "show_mascot", &show.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -566,6 +601,28 @@ mod tests {
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
 
         assert_eq!(version, LATEST_VERSION);
+    }
+
+    #[test]
+    fn appearance_defaults_to_system_theme_with_mascot_and_reads_back_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "system".into(), show_mascot: true });
+
+        set_theme(&conn, "dark").unwrap();
+        set_show_mascot(&conn, false).unwrap();
+        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "dark".into(), show_mascot: false });
+
+        set_show_mascot(&conn, true).unwrap();
+        assert!(appearance(&conn).unwrap().show_mascot);
+    }
+
+    #[test]
+    fn an_unknown_theme_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        assert!(set_theme(&conn, "pink").is_err());
+        assert_eq!(appearance(&conn).unwrap().theme, "system");
     }
 
     fn settings(work_start: &str) -> Settings {

@@ -49,6 +49,33 @@ fn list_settings_history(db: State<Db>) -> Result<Vec<store::SettingsRow>, Strin
 }
 
 #[tauri::command]
+fn get_appearance(db: State<Db>) -> Result<store::Appearance, String> {
+    store::appearance(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+}
+
+/// `Some(Dark)` or `Some(Light)` forces the native window frame (title bar) to that theme. `None` follows the system.
+fn apply_native_theme(app: &AppHandle, theme: &str) {
+    app.set_theme(match theme {
+        "light" => Some(tauri::Theme::Light),
+        "dark" => Some(tauri::Theme::Dark),
+        _ => None,
+    });
+}
+
+/// Stores the theme, sets the native frame and tells every window.
+#[tauri::command]
+fn set_theme(app: AppHandle, db: State<Db>, theme: String) -> Result<(), String> {
+    store::set_theme(&db.0.lock().unwrap(), &theme)?;
+    apply_native_theme(&app, &theme);
+    app.emit("theme-changed", theme).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_show_mascot(db: State<Db>, show: bool) -> Result<(), String> {
+    store::set_show_mascot(&db.0.lock().unwrap(), show).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn create_entry(db: State<Db>, entry: store::Entry) -> Result<store::Entry, String> {
     store::create_entry(&db.0.lock().unwrap(), &entry)
 }
@@ -244,6 +271,9 @@ pub fn run() {
             // Without a database no other part of the app starts (the ticker waits for the database).
             match safety::open_safely(&dir) {
                 Ok(conn) => {
+                    if let Ok(a) = store::appearance(&conn) {
+                        apply_native_theme(app.handle(), &a.theme);
+                    }
                     app.manage(Db(Mutex::new(conn)));
                     app.manage(StartupFailure(Mutex::new(None)));
                 }
@@ -286,6 +316,9 @@ pub fn run() {
             get_settings,
             save_settings,
             list_settings_history,
+            get_appearance,
+            set_theme,
+            set_show_mascot,
             create_entry,
             update_entry,
             delete_entry,

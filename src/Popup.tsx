@@ -1,20 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { createContext, KeyboardEvent, useContext, useEffect, useId, useRef, useState } from "react";
 import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
 import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
 import type { Settings } from "./Settings";
+import type { Appearance } from "./theme";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
 type Category = { id: number; name: string };
-type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[]; today: string; askLocation: boolean; gap: boolean; previous: Entry | null };
+type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[]; today: string; askLocation: boolean; gap: boolean; previous: Entry | null; showMascot: boolean };
 type Line = { me: boolean; text: string };
 
 const SNOOZE_MINUTES = 5;
 const HISTORY_DAYS = 30;
 const MAC = navigator.platform.startsWith("Mac");
 const STILL_KEY = MAC ? "Cmd+Enter" : "Ctrl+Enter";
+
+/** Read at each check-in, so a change applies at the next popup. */
+const ShowMascot = createContext(true);
 
 /** The always-on-top check-in window. It stays hidden until a tick says a popup is due. */
 export function Popup() {
@@ -52,7 +56,7 @@ export function Popup() {
       const today = dateKey(ymdIn(settings.tz, nowUtc));
       const askLocation = !(await invoke<unknown[]>("list_workday_locations", { from: today, to: today })).length; // the first popup of the day
       const previous = entries.filter((e) => e.endUtc <= spans[0].startUtc).sort((a, b) => b.endUtc - a.endUtc)[0] ?? null;
-      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation, gap: !!gapSpans, previous });
+      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation, gap: !!gapSpans, previous, showMascot: (await invoke<Appearance>("get_appearance")).showMascot });
     };
     const unlisten = listen<{ nowUtc: number }>("tick", ({ payload }) => check(payload.nowUtc));
     const debug = listen("debug-popup", () => check(Math.floor(Date.now() / 1000), true));
@@ -61,7 +65,11 @@ export function Popup() {
   }, []);
 
   if (!ask) return null;
-  return ask.gap ? <GapChat key={ask.now} ask={ask} onDone={finish} /> : <Chat key={ask.now} ask={ask} onDone={finish} />;
+  return (
+    <ShowMascot.Provider value={ask.showMascot}>
+      {ask.gap ? <GapChat key={ask.now} ask={ask} onDone={finish} /> : <Chat key={ask.now} ask={ask} onDone={finish} />}
+    </ShowMascot.Provider>
+  );
 }
 
 function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void }) {
@@ -319,11 +327,12 @@ export function ErrorLine({ error, retry }: { error: string; retry?: () => void 
 const SPRITE = ["..xxxxxx..", ".xxxxxxxx.", "xxxxxxxxxx", "xxexxxxexx", "xxxxxxxxxx", "xxxmmmmxxx", ".xxxxxxxx.", ".xxxxxxxx.", ".xx.xx.xx."];
 const PIXEL = { x: "var(--color-mascot-body)", e: "var(--color-mascot-eye)", m: "var(--color-mascot-beak)" } as Record<string, string>;
 function Say({ text }: { text: string }) {
+  const showMascot = useContext(ShowMascot);
   return (
     <div className="wt-bot">
-      <svg aria-hidden="true" width="30" height="27" viewBox="0 0 10 9" shapeRendering="crispEdges" style={{ flex: "none" }}>
+      {showMascot && <svg aria-hidden="true" width="30" height="27" viewBox="0 0 10 9" shapeRendering="crispEdges" style={{ flex: "none" }}>
         {SPRITE.flatMap((row, y) => [...row].map((c, x) => c !== "." && <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={PIXEL[c]} />))}
-      </svg>
+      </svg>}
       <div className="wt-bubble">{text}</div>
     </div>
   );
