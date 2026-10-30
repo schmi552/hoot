@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { exportDays, exportRows } from "./exportRows";
-import { Absence, absenceSpans } from "./schedule/absences";
+import type { Absence } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
 import { dateKey, dayBoundsIn, ymdIn } from "./schedule/schedule";
 import type { Settings } from "./Settings";
@@ -39,10 +39,8 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
         invoke<Absence[]>("list_absences"),
       ]);
       const meetings = expandMeetings(series, exceptions, fromUtc, toUtc);
-      const spans = absenceSpans(absences, settings.tz);
-      const inRange = absences.filter((_, i) => spans[i].startUtc < toUtc && spans[i].endUtc > fromUtc);
       const name = (id: number) => categories.find((c) => c.id === id)?.name ?? "Archived";
-      await invoke("export_xlsx", { path: target, export: { rows: exportRows(entries, meetings, inRange, settings.tz, name), days: exportDays(locations) } });
+      await invoke("export_xlsx", { path: target, export: { rows: exportRows(entries, meetings, absences, settings.tz, { from, to }, name), days: exportDays(locations) } });
       setMessage(`Saved ${target}`);
     } catch (e) {
       setMessage(String(e));

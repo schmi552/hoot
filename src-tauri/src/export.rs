@@ -52,7 +52,9 @@ fn build(export: &Export) -> Result<Workbook, String> {
         sheet.write_string(i, 0, &r.date).map_err(|e| e.to_string())?;
         sheet.write_string(i, 1, &r.start).map_err(|e| e.to_string())?;
         sheet.write_string(i, 2, &r.end).map_err(|e| e.to_string())?;
-        sheet.write_number_with_format(i, 3, hours(r.minutes), &h2).map_err(|e| e.to_string())?;
+        if !r.absence {
+            sheet.write_number_with_format(i, 3, hours(r.minutes), &h2).map_err(|e| e.to_string())?;
+        }
         sheet.write_string(i, 4, &r.category).map_err(|e| e.to_string())?;
         sheet.write_string(i, 5, &r.description).map_err(|e| e.to_string())?;
         sheet.write_string(i, 6, location_of.get(r.date.as_str()).copied().unwrap_or("")).map_err(|e| e.to_string())?;
@@ -147,15 +149,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("report.xlsx");
         let mut export = sample();
-        export.rows.push(Row { absence: true, ..row("2026-10-28", 480, "Absence", "Vacation") });
-        export.rows.push(Row { absence: true, start: "".into(), end: "".into(), ..row("2026-10-29", 2880, "Absence", "Leave") }); // full-day
+        export.rows.push(Row { absence: true, ..row("2026-10-28", 480, "Absence (not worked)", "Vacation") });
+        export.rows.push(Row { absence: true, start: "".into(), end: "".into(), ..row("2026-10-29", 0, "Absence (not worked)", "Leave") }); // full-day
         export.rows.push(row("2026-10-28", 60, "A", "Weekly sync")); // a Meeting counts like an Entry
         write(&path, &export).unwrap();
         let mut book: Xlsx<_> = open_workbook(&path).unwrap();
         let entries = text(&book.worksheet_range("Entries").unwrap());
         assert_eq!(entries.len(), 7);
-        assert_eq!(entries[4], ["2026-10-28", "09:00", "10:00", "8", "Absence", "Vacation", "Home"]);
-        assert_eq!(entries[5], ["2026-10-29", "", "", "48", "Absence", "Leave", ""]);
+        assert_eq!(entries[4], ["2026-10-28", "09:00", "10:00", "", "Absence (not worked)", "Vacation", "Home"]);
+        assert_eq!(entries[5], ["2026-10-29", "", "", "", "Absence (not worked)", "Leave", ""]);
         let days = text(&book.worksheet_range("Hours per day").unwrap());
         assert_eq!(days[0], ["Date", "Location", "A", "B"]);
         assert_eq!(days.len(), 4, "an Absence adds no day and no Category column");
