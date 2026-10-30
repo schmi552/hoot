@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { absenceSpans } from "./absences";
-import { expectedOn, dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, splitGap, recentEntries, resizedEnd } from "./schedule";
+import { expectedOn, dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, settingsOn, splitGap, recentEntries, resizedEnd } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -72,7 +72,7 @@ test("a duplicate goes into the next free slot after the original", () => {
   expect(nextFreeSlot(day, { startUtc: 3600, endUtc: 4000 })).toEqual({ startUtc: 4000, endUtc: 4400 });
 });
 
-const hours = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 60 };
+const hours = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 60, workdays: "12345" };
 const friday = { y: 2026, m: 10, d: 30 };
 const at = (h: number, m = 0, ymd = friday) => instantAt("UTC", ymd, h * 60 + m);
 const span = (a: number, b: number, bm = 0) => ({ startUtc: at(a), endUtc: at(b, bm) });
@@ -97,6 +97,16 @@ test("the popup span ends at the end of work hours and keeps minute precision", 
 test("there is no popup span on a weekend", () => {
   const saturday = { y: 2026, m: 10, d: 31 };
   expect(popupSpans(hours, at(9, 0, saturday), at(11, 0, saturday))).toEqual([]);
+});
+
+test("there is no popup span on a day that is not a Workday, and one on a Sunday that is", () => {
+  const sunday = { y: 2026, m: 11, d: 1 };
+  const friday = { y: 2026, m: 10, d: 30 };
+  const on = (workdays: string) => ({ ...hours, workdays });
+  expect(popupSpans(on("12345"), at(9, 0, sunday), at(11, 0, sunday))).toEqual([]);
+  expect(popupSpans(on("0"), at(9, 0, sunday), at(11, 0, sunday))).toEqual([{ startUtc: at(9, 0, sunday), endUtc: at(11, 0, sunday) }]);
+  expect(popupSpans(on("0"), at(9, 0, friday), at(11, 0, friday))).toEqual([]);
+  expect(popupDue(on("12345"), at(11, 0, sunday), [], 0)).toBeNull();
 });
 
 test("a popup is due when a full interval has passed since the last Entry", () => {
@@ -132,7 +142,7 @@ test("no popup while an Entry covers the present", () => {
   expect(popupDue(hours, at(11), [span(9, 10), span(10, 12)], 0)).toBeNull();
 });
 
-const gapSettings = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 30 };
+const gapSettings = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 30, workdays: "12345" };
 const t = (h: number, m = 0) => Date.UTC(2026, 9, 28, h, m) / 1000; // Wednesday
 
 test("a Gap starts at the later of the last Entry end and the last popup, and lunch is cut out", () => {
@@ -166,7 +176,7 @@ test("a Gap splits at the given times and lunch stays out of the parts", () => {
 });
 
 test("an Absence reduces the expected time of a day and is not logged time", () => {
-  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30, workdays: "12345" };
   const monday = { y: 2026, m: 8, d: 3 };
   const at = (h: number) => instantAt(s.tz, monday, h * 60);
   const none = { id: 0, kind: "Other" as const, label: "", startDate: null, endDate: null, startUtc: null, endUtc: null, tz: null };
@@ -181,7 +191,7 @@ test("an Absence reduces the expected time of a day and is not logged time", () 
 });
 
 test("no popup is due during an Absence", () => {
-  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30, workdays: "12345" };
   const day = { y: 2026, m: 8, d: 3 };
   const now = instantAt(s.tz, day, 10 * 60);
   const off = absenceSpans([{ id: 0, kind: "Other" as const, label: "", startDate: "2026-08-03", endDate: "2026-08-03", startUtc: null, endUtc: null, tz: null }], s.tz);
@@ -191,11 +201,24 @@ test("no popup is due during an Absence", () => {
 });
 
 test("a Gap leaves out an Absence", () => {
-  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30, workdays: "12345" };
   const day = { y: 2026, m: 8, d: 3 };
   const at = (h: number) => instantAt(s.tz, day, h * 60);
   const off = [{ startUtc: at(9), endUtc: at(10) }];
 
   expect(gapDue(s, at(11), [], 0, [])).toEqual([{ startUtc: at(9), endUtc: at(11) }]);
   expect(gapDue(s, at(11), [], 0, off)).toEqual([{ startUtc: at(10), endUtc: at(11) }]);
+});
+
+test("expected time is zero on a day that is not a Workday and uses the Workdays valid on that day", () => {
+  const history = [
+    { ...hours, effectiveFrom: "2026-10-01", workdays: "12345" },
+    { ...hours, effectiveFrom: "2026-11-04", workdays: "1234" }, // a Wednesday: Friday stops being a Workday from here on
+  ];
+  const expected = (ymd: { y: number; m: number; d: number }) => expectedOn(settingsOn(history, ymd), ymd);
+  expect(expected({ y: 2026, m: 10, d: 30 })).toBe(7 * 60); // an old Friday keeps its time
+  expect(expected({ y: 2026, m: 11, d: 4 })).toBe(7 * 60); // the start date itself uses the new row
+  expect(expected({ y: 2026, m: 11, d: 6 })).toBe(0); // the first new Friday
+  expect(expected({ y: 2026, m: 10, d: 31 })).toBe(0); // a Saturday
+  expect(settingsOn(history, { y: 2026, m: 9, d: 1 }).effectiveFrom).toBe("2026-10-01"); // before the first row
 });

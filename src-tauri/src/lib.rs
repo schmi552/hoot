@@ -39,8 +39,13 @@ fn get_settings(db: State<Db>) -> Result<Option<store::Settings>, String> {
 }
 
 #[tauri::command]
-fn save_settings(db: State<Db>, settings: store::Settings) -> Result<(), String> {
-    store::save_settings(&db.0.lock().unwrap(), &settings, &safety::today()).map_err(|e| e.to_string())
+fn save_settings(db: State<Db>, settings: store::Settings, start: String) -> Result<(), String> {
+    store::save_settings(&db.0.lock().unwrap(), &settings, &start, &safety::today())
+}
+
+#[tauri::command]
+fn list_settings_history(db: State<Db>) -> Result<Vec<store::SettingsRow>, String> {
+    store::settings_history(&db.0.lock().unwrap()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -280,6 +285,7 @@ pub fn run() {
             remove_category,
             get_settings,
             save_settings,
+            list_settings_history,
             create_entry,
             update_entry,
             delete_entry,

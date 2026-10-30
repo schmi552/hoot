@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
 
 export type Settings = {
   workStart: string;
@@ -9,6 +10,8 @@ export type Settings = {
   lunchEnd: string;
   tz: string;
   intervalMinutes: number;
+  /** Weekday digits of the Workdays, 0 is Sunday. */
+  workdays: string;
 };
 type Category = { id: number; code: string; name: string; color: number };
 
@@ -19,18 +22,35 @@ const defaults = (): Settings => ({
   lunchEnd: "13:00",
   tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   intervalMinutes: 60,
+  workdays: "12345",
 });
 
+/** Monday to Sunday, as the weekday digit and the label. */
+const DAYS: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
+
+/** The next Monday after `today` ("YYYY-MM-DD"). On a Monday it is a week later. */
+export function nextMonday(today: string): string {
+  const [y, m, d] = today.split("-").map(Number);
+  const ymd = { y, m, d: d + 8 - (weekday({ y, m, d }) || 7) };
+  return dateKey(ymdIn("UTC", instantAt("UTC", ymd)));
+}
+
+/** True if a save needs a start date: Expected per day or the Workdays differ from `saved`. Else the save starts today. */
+export const needsStartDate = (s: Settings, saved: Settings | null) =>
+  !!saved && (expectedMinutes(s) !== expectedMinutes(saved) || s.workdays !== saved.workdays);
+
 /** "HH:MM" strings sort in time order. Returns the first problem, or "" if there is none. */
-export function validate(s: Settings): string {
+export function validate(s: Settings, start = "", today = ""): string {
   if (s.workEnd <= s.workStart) return "Work must end after it starts.";
   if (s.lunchEnd <= s.lunchStart) return "Lunch must end after it starts.";
   if (s.lunchStart < s.workStart || s.lunchEnd > s.workEnd) return "Lunch must be inside work hours.";
   if (!Number.isInteger(s.intervalMinutes) || s.intervalMinutes < 1) return "The interval must be a whole number of minutes, at least 1.";
+  if (!s.workdays) return "Choose at least one Workday.";
+  if (start < today) return "The start date cannot be in the past.";
   return "";
 }
 
-/** One form for first run (`saved` is null) and for later changes. A save applies from today on. */
+/** One form for first run (`saved` is null) and for later changes. A save starts today, or on the start date when Expected per day changes. */
 export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSaved: () => void }) {
   const [s, setS] = useState<Settings>(saved ?? defaults());
   const [categories, setCategories] = useState<Category[]>([]);
@@ -38,6 +58,10 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
+  const today = dateKey(ymdIn(s.tz, Date.now() / 1000));
+  const [from, setFrom] = useState(nextMonday(today));
+  const dated = needsStartDate(s, saved);
+  const start = dated ? from : today;
 
   const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
   useEffect(() => void refresh(), []);
@@ -52,10 +76,10 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
     </label>
   );
 
-  const problem = validate(s);
+  const problem = validate(s, start, today);
   const fail = (e: unknown) => setMessage(String(e));
   const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
-  const save = () => invoke("save_settings", { settings: s }).then(onSaved, fail);
+  const save = () => invoke("save_settings", { settings: s, start }).then(onSaved, fail);
   const add = () =>
     invoke("add_category", { code: code.trim(), name: name.trim() }).then(() => {
       setCode("");
@@ -76,7 +100,7 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
   return (
     <main className="wt-startup">
       <h1>{saved ? "Settings" : "Welcome. Set up Work Tracker"}</h1>
-      <p>{saved ? "A change applies from today on." : "You can change all of this later."}</p>
+      <p>{saved ? "A change applies from the start date." : "You can change all of this later."}</p>
       <form
         className="wt-form"
         onSubmit={(e) => {
@@ -89,6 +113,25 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
         {field("Lunch starts", "lunchStart")}
         {field("Lunch ends", "lunchEnd")}
         {field("Popup every (minutes)", "intervalMinutes", "number")}
+        <fieldset className="wt-row">
+          <legend className="wt-label">Workdays</legend>
+          {DAYS.map(([digit, label]) => (
+            <label key={digit}>
+              <input
+                type="checkbox"
+                checked={s.workdays.includes(digit)}
+                onChange={(e) => setS({ ...s, workdays: DAYS.map(([d]) => d).filter((d) => (d === digit ? e.target.checked : s.workdays.includes(d))).join("") })}
+              />{" "}
+              {label}{" "}
+            </label>
+          ))}
+        </fieldset>
+        {dated && (
+          <label className="wt-row">
+            <span className="wt-label">From</span>
+            <input className="wt-input" type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} required />
+          </label>
+        )}
         <p className="wt-error" role="alert">{problem}</p>
         <button className="wt-chip is-primary" type="submit" disabled={!!problem}>
           {saved ? "Save" : "Start"}

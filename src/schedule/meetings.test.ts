@@ -79,7 +79,7 @@ test("subtractSpans cuts Meetings out of a span", () => {
   ]);
 });
 
-const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 60 };
+const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 60, workdays: "12345" };
 
 test("no popup shows during a Meeting and the popup span skips it", () => {
   const meeting = [{ startUtc: at(23, 600), endUtc: at(23, 660) }]; // 10:00-11:00

@@ -103,7 +103,20 @@ export function nextFreeSlot(entries: (Span & { id: number })[], span: Span): Sp
   return { startUtc, endUtc: startUtc + len };
 }
 
-type WorkHours = { workStart: string; workEnd: string; lunchStart: string; lunchEnd: string; tz: string; intervalMinutes: number };
+/** `workdays` holds the weekday digits of the Workdays, 0 is Sunday: "12345" is Monday to Friday. */
+type WorkHours = { workStart: string; workEnd: string; lunchStart: string; lunchEnd: string; tz: string; intervalMinutes: number; workdays: string };
+
+/** True if `ymd` is a Workday in `workdays`. */
+export const isWorkday = (workdays: string, ymd: Ymd) => workdays.includes(String(weekday(ymd)));
+
+/** A row of the settings history: the settings from the day `effectiveFrom` ("YYYY-MM-DD") on. */
+export type SettingsRow<S> = S & { effectiveFrom: string };
+
+/** The settings that are valid on `day`: the latest row that starts on or before it. A day before the first row uses the first row. */
+export function settingsOn<S>(history: SettingsRow<S>[], day: Ymd): SettingsRow<S> {
+  const key = dateKey(day);
+  return [...history].reverse().find((r) => r.effectiveFrom <= key) ?? history[0];
+}
 
 /** The parts of `spans` that `cuts` do not cover. */
 export function subtractSpans(spans: Span[], cuts: Span[]): Span[] {
@@ -113,10 +126,10 @@ export function subtractSpans(spans: Span[], cuts: Span[]): Span[] {
   );
 }
 
-/** The parts of [fromUtc, toUtc] that are work time on the day of `toUtc`: inside work hours, lunch and `busy` spans (Meetings) cut out, whole minutes. Empty on a weekend. */
+/** The parts of [fromUtc, toUtc] that are work time on the day of `toUtc`: inside work hours, lunch and `busy` spans (Meetings) cut out, whole minutes. Empty on a day that is not a Workday. */
 export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number, busy: Span[] = []): Span[] {
   const day = ymdIn(s.tz, toUtc);
-  if ([0, 6].includes(weekday(day))) return [];
+  if (!isWorkday(s.workdays, day)) return [];
   const at = (hm: string) => instantAt(s.tz, day, parseHM(hm));
   const end = toUtc - (toUtc % 60);
   const work = [[s.workStart, s.lunchStart], [s.lunchEnd, s.workEnd]]
@@ -125,7 +138,7 @@ export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number, busy: S
   return subtractSpans(work, busy);
 }
 
-/** Expected work on the day `ymd`: work time without lunch and without `absences`. Zero on a weekend. */
+/** Expected work on the day `ymd`: work time without lunch and without `absences`. Zero on a day that is not a Workday. */
 export function expectedOn(s: WorkHours, ymd: Ymd, absences: Span[] = []): number {
   const [from, to] = dayBoundsIn(s.tz, ymd);
   return popupSpans(s, from, to - 1, absences).reduce((sum, p) => sum + minutesBetween(p.startUtc, p.endUtc), 0);

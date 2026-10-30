@@ -11,7 +11,7 @@ import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor, sourceText } from "./schedule/meetings";
@@ -71,6 +71,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
   const clipboard = useRef<Entry | null>(null);
 
+  const [rows, setRows] = useState<SettingsRow<Settings>[]>([]); // the settings history: each day uses the row that was valid on it
   const [reload, setReload] = useState(0);
   const load = () => setReload((n) => n + 1);
   useEffect(() => {
@@ -90,6 +91,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     invoke<{ date: string; location: string }[]>("list_workday_locations", { from, to }).then((l) => stale || setLocations(Object.fromEntries(l.map((x) => [x.date, x.location]))));
     return () => void (stale = true);
   }, [range, reload]);
+  useEffect(() => void invoke<SettingsRow<Settings>[]>("list_settings_history").then(setRows), [settings]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
   useEffect(() => void invoke<MeetingSeries[]>("list_meetings").then(setSeries), [reload]);
   useEffect(() => void invoke<MeetingException[]>("list_meeting_exceptions").then(setExceptions), [reload]);
@@ -295,7 +297,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   // The header date is the start of the day in the zone of the settings.
   const dayOf = (d: Date) => ymdIn(settings.tz, secs(d));
   const away = absenceSpans(absences, settings.tz);
-  const expected = (d: Date) => expectedOn(settings, dayOf(d), away);
+  const expected = (d: Date) => expectedOn(rows.length ? settingsOn(rows, dayOf(d)) : settings, dayOf(d), away);
   const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
   const where = (d: Date) => ({ home: "Home", office: "Office" })[locations[dateKey(dayOf(d))]] ?? "";
   const daySub = (d: Date) => `${formatHM(logged(d))} / ${formatHM(expected(d))}${where(d) && ` · ${where(d)}`}`;

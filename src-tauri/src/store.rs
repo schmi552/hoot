@@ -14,9 +14,10 @@ pub struct Category {
 }
 
 /// The schema version that the newest migration creates.
-pub const LATEST_VERSION: i64 = 7;
+pub const LATEST_VERSION: i64 = 8;
 
-/// Times are "HH:MM" in the zone `tz`. `effective_from` is not part of it: a save always starts today.
+/// Times are "HH:MM" in the zone `tz`. `workdays` holds the weekday digits of the Workdays, 0 is Sunday: "12345" is Monday to Friday.
+/// `effective_from` is not part of it: a save names its start date.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -26,6 +27,16 @@ pub struct Settings {
     pub lunch_end: String,
     pub tz: String,
     pub interval_minutes: i64,
+    pub workdays: String,
+}
+
+/// A row of `settings_history`: the settings from the date `effective_from` on.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsRow {
+    pub effective_from: String,
+    #[serde(flatten)]
+    pub settings: Settings,
 }
 
 pub fn migrations() -> Migrations<'static> {
@@ -149,46 +160,69 @@ pub fn migrations() -> Migrations<'static> {
             INSERT INTO meeting_exception SELECT * FROM exception_save;
             DROP TABLE exception_save;",
         ),
+        // Existing rows get Monday to Friday, which is what the fixed weekend rule did.
+        M::up("ALTER TABLE settings_history ADD COLUMN workdays TEXT NOT NULL DEFAULT '12345';"),
     ])
 }
 
-/// Save `settings` from the date `today` on. A second save on the same day replaces the first.
-pub fn save_settings(conn: &Connection, settings: &Settings, today: &str) -> Result<()> {
+/// Save `settings` from the date `start` on. A second save for the same date replaces the first.
+/// `start` and `today` are "YYYY-MM-DD"; a `start` before `today` is refused, because it would change closed weeks.
+pub fn save_settings(conn: &Connection, settings: &Settings, start: &str, today: &str) -> Result<(), String> {
+    if start < today {
+        return Err("The start date cannot be in the past.".into());
+    }
     conn.execute(
         "INSERT OR REPLACE INTO settings_history
-         (effective_from, work_start, work_end, lunch_start, lunch_end, tz, interval_minutes)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         (effective_from, work_start, work_end, lunch_start, lunch_end, tz, interval_minutes, workdays)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         (
-            today,
+            start,
             &settings.work_start,
             &settings.work_end,
             &settings.lunch_start,
             &settings.lunch_end,
             &settings.tz,
             settings.interval_minutes,
+            &settings.workdays,
         ),
     )
     .map(drop)
+    .map_err(|e| e.to_string())
 }
+
+fn settings_row(r: &rusqlite::Row) -> Result<SettingsRow> {
+    Ok(SettingsRow {
+        effective_from: r.get(0)?,
+        settings: Settings {
+            work_start: r.get(1)?,
+            work_end: r.get(2)?,
+            lunch_start: r.get(3)?,
+            lunch_end: r.get(4)?,
+            tz: r.get(5)?,
+            interval_minutes: r.get(6)?,
+            workdays: r.get(7)?,
+        },
+    })
+}
+
+const SETTINGS_COLUMNS: &str = "effective_from, work_start, work_end, lunch_start, lunch_end, tz, interval_minutes, workdays";
 
 /// The settings that were true on `date` ("YYYY-MM-DD"). None before the first save.
 pub fn settings_on(conn: &Connection, date: &str) -> Result<Option<Settings>> {
     conn.query_row(
-        "SELECT work_start, work_end, lunch_start, lunch_end, tz, interval_minutes
-         FROM settings_history WHERE effective_from <= ?1 ORDER BY effective_from DESC LIMIT 1",
+        &format!("SELECT {SETTINGS_COLUMNS} FROM settings_history WHERE effective_from <= ?1 ORDER BY effective_from DESC LIMIT 1"),
         [date],
-        |r| {
-            Ok(Settings {
-                work_start: r.get(0)?,
-                work_end: r.get(1)?,
-                lunch_start: r.get(2)?,
-                lunch_end: r.get(3)?,
-                tz: r.get(4)?,
-                interval_minutes: r.get(5)?,
-            })
-        },
+        settings_row,
     )
     .optional()
+    .map(|r| r.map(|r| r.settings))
+}
+
+/// Every saved row, oldest first, so a week view can use the settings that were true on each of its days.
+pub fn settings_history(conn: &Connection) -> Result<Vec<SettingsRow>> {
+    conn.prepare(&format!("SELECT {SETTINGS_COLUMNS} FROM settings_history ORDER BY effective_from"))?
+        .query_map([], settings_row)?
+        .collect()
 }
 
 /// Delete a Category, or archive it when an Entry, a Meeting series or an exception uses it. Returns true if it was archived.
@@ -542,6 +576,7 @@ mod tests {
             lunch_end: "13:00".into(),
             tz: "Europe/Berlin".into(),
             interval_minutes: 60,
+            workdays: "12345".into(),
         }
     }
 
@@ -549,8 +584,8 @@ mod tests {
     fn a_past_day_keeps_the_settings_that_were_true_on_that_day() {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
-        save_settings(&conn, &settings("08:00"), "2026-01-01").unwrap();
-        save_settings(&conn, &settings("09:30"), "2026-03-01").unwrap();
+        save_settings(&conn, &settings("08:00"), "2026-01-01", "2026-01-01").unwrap();
+        save_settings(&conn, &settings("09:30"), "2026-03-01", "2026-01-01").unwrap();
 
         assert_eq!(settings_on(&conn, "2025-12-31").unwrap(), None);
         assert_eq!(settings_on(&conn, "2026-02-28").unwrap(), Some(settings("08:00")));
@@ -559,11 +594,58 @@ mod tests {
     }
 
     #[test]
+    fn a_start_date_in_the_past_is_refused_and_today_is_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+
+        assert!(save_settings(&conn, &settings("08:00"), "2026-01-01", "2026-01-02").is_err());
+        assert_eq!(settings_on(&conn, "2026-01-01").unwrap(), None, "a refused save writes nothing");
+        assert!(save_settings(&conn, &settings("08:00"), "2026-01-02", "2026-01-02").is_ok());
+    }
+
+    #[test]
+    fn a_start_in_the_middle_of_a_week_uses_the_new_values_from_that_day_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        save_settings(&conn, &settings("08:00"), "2026-08-03", "2026-08-03").unwrap();
+        // 2026-08-05 is a Wednesday.
+        save_settings(&conn, &Settings { workdays: "135".into(), ..settings("09:30") }, "2026-08-05", "2026-08-03").unwrap();
+
+        assert_eq!(settings_on(&conn, "2026-08-04").unwrap(), Some(settings("08:00")));
+        assert_eq!(settings_on(&conn, "2026-08-05").unwrap().unwrap().workdays, "135");
+        assert_eq!(settings_on(&conn, "2026-08-07").unwrap().unwrap().work_start, "09:30");
+        let history = settings_history(&conn).unwrap();
+        assert_eq!(history.iter().map(|r| r.effective_from.as_str()).collect::<Vec<_>>(), ["2026-08-03", "2026-08-05"]);
+    }
+
+    #[test]
+    fn a_save_for_the_same_hours_but_other_workdays_keeps_the_old_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        save_settings(&conn, &settings("08:00"), "2026-08-03", "2026-08-03").unwrap();
+        save_settings(&conn, &Settings { workdays: "0123456".into(), ..settings("08:00") }, "2026-08-10", "2026-08-03").unwrap();
+
+        assert_eq!(settings_on(&conn, "2026-08-09").unwrap().unwrap().workdays, "12345");
+        assert_eq!(settings_on(&conn, "2026-08-10").unwrap().unwrap().workdays, "0123456");
+    }
+
+    #[test]
+    fn the_migration_gives_old_settings_rows_monday_to_friday() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut conn, 7).unwrap();
+        conn.execute("INSERT INTO settings_history VALUES ('2026-01-01', '09:00', '17:00', '12:00', '13:00', 'UTC', 60)", []).unwrap();
+
+        migrations().to_latest(&mut conn).unwrap();
+
+        assert_eq!(settings_on(&conn, "2026-01-01").unwrap().unwrap().workdays, "12345");
+    }
+
+    #[test]
     fn a_second_save_on_the_same_day_replaces_the_first() {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
-        save_settings(&conn, &settings("08:00"), "2026-01-01").unwrap();
-        save_settings(&conn, &settings("07:00"), "2026-01-01").unwrap();
+        save_settings(&conn, &settings("08:00"), "2026-01-01", "2026-01-01").unwrap();
+        save_settings(&conn, &settings("07:00"), "2026-01-01", "2026-01-01").unwrap();
 
         assert_eq!(settings_on(&conn, "2026-01-01").unwrap(), Some(settings("07:00")));
     }
