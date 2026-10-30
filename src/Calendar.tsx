@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   dateKey, dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
 } from "./schedule/schedule";
+import { ExportDialog } from "./Export";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
@@ -40,6 +41,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [editing, setEditing] = useState<Entry | null>(null);
   const [selected, setSelected] = useState(0);
   const [notice, setNotice] = useState("");
+  const [exporting, setExporting] = useState(false);
   const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
   const clipboard = useRef<Entry | null>(null);
 
@@ -206,6 +208,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       }}
     >
       <button className="wt-chip" onClick={onSettings}>Settings</button>
+      <button className="wt-chip" onClick={() => setExporting(true)}>Export</button>
+      {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
       {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
       {slot && (

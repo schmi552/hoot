@@ -1,3 +1,4 @@
+mod export;
 mod safety;
 mod store;
 
@@ -65,6 +66,11 @@ fn set_workday_location(db: State<Db>, date: String, location: String) -> Result
 #[tauri::command]
 fn list_workday_locations(db: State<Db>, from: String, to: String) -> Result<Vec<store::WorkdayLocation>, String> {
     store::list_workday_locations(&db.0.lock().unwrap(), &from, &to).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_xlsx(path: String, export: export::Export) -> Result<(), String> {
+    export::write(std::path::Path::new(&path), &export)
 }
 
 fn recovered(app: &AppHandle, conn: rusqlite::Connection) {
@@ -154,6 +160,7 @@ fn show_main(app: &AppHandle) {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -206,6 +213,7 @@ pub fn run() {
             list_entries,
             set_workday_location,
             list_workday_locations,
+            export_xlsx,
             startup_failure,
             start_empty,
             restore_latest_backup,
