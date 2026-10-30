@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
 
 export type Settings = {
@@ -35,9 +36,11 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+  const [autostart, setAutostart] = useState(false);
 
   const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
   useEffect(() => void refresh(), []);
+  useEffect(() => void isEnabled().then(setAutostart, fail), []);
 
   const set = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setS({ ...s, [k]: k === "intervalMinutes" ? e.target.valueAsNumber : e.target.value });
@@ -50,6 +53,7 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
 
   const problem = validate(s);
   const fail = (e: unknown) => setMessage(String(e));
+  const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
   const save = () => invoke("save_settings", { settings: s }).then(onSaved, fail);
   const add = () =>
     invoke("add_category", { name: name.trim() }).then(() => {
@@ -84,6 +88,11 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
           {saved ? "Save" : "Start"}
         </button>
       </form>
+
+      <label className="wt-row">
+        <span className="wt-label">Start at login</span>
+        <input type="checkbox" checked={autostart} onChange={(e) => toggleAutostart(e.target.checked)} />
+      </label>
 
       <h2>Categories</h2>
       <ul>

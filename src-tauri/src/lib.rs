@@ -175,7 +175,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory); // no Dock icon
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             // Without a database no other part of the app starts (the ticker waits for the database).
