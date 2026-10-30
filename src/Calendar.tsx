@@ -16,6 +16,7 @@ import {
 import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
+import { ImportDialog } from "./Import";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
@@ -66,6 +67,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [menu, setMenu] = useState(false);
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
   const clipboard = useRef<Entry | null>(null);
 
@@ -310,6 +312,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     >
       <button className="wt-chip" onClick={onSettings}>Settings</button>
       <button className="wt-chip" onClick={() => setExporting(true)}>Export</button>
+      <button className="wt-chip" disabled={!categories.length} title={categories.length ? "" : "Add a Category in Settings first."} onClick={() => setImporting(true)}>Import .ics</button>
       <span className="wt-menu">
         <button className="wt-chip" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
         {menu && <button className="wt-chip" onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>}
@@ -324,6 +327,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       )}
       {pickedAbsence && <button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button>}
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
+      {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={() => (setImporting(false), load())} />}
       {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
       {slot && (

@@ -341,6 +341,25 @@ pub fn set_meeting_exception(conn: &Connection, x: &MeetingException) -> Result<
     Ok(())
 }
 
+/// One Meeting series from an `.ics` file with its exceptions. The ids inside are ignored.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ImportedMeeting {
+    pub series: MeetingSeries,
+    pub exceptions: Vec<MeetingException>,
+}
+
+/// Save imported Meetings. All of them are saved or none.
+pub fn import_meetings(conn: &mut Connection, meetings: &[ImportedMeeting]) -> Result<()> {
+    let tx = conn.transaction()?;
+    for m in meetings {
+        let id = create_meeting(&tx, &m.series)?.id;
+        for x in &m.exceptions {
+            set_meeting_exception(&tx, &MeetingException { series_id: id, ..x.clone() })?;
+        }
+    }
+    tx.commit()
+}
+
 pub fn list_meeting_exceptions(conn: &Connection) -> Result<Vec<MeetingException>> {
     conn.prepare("SELECT series_id, original_start_local, kind, start_local, duration_minutes, title, category_id FROM meeting_exception")?
         .query_map([], |r| {
@@ -550,6 +569,25 @@ mod tests {
         assert_eq!(list_workday_locations(&conn, "2026-10-01", "2026-10-31").unwrap().len(), 2);
         assert_eq!(list_workday_locations(&conn, "2026-11-01", "2026-11-30").unwrap(), vec![]);
         assert!(set_workday_location(&conn, "2026-10-31", "moon").is_err());
+    }
+
+    #[test]
+    fn an_import_saves_every_series_with_its_exceptions_or_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = crate::safety::open_safely(dir.path()).unwrap();
+        let c = add_category(&conn, "A").unwrap();
+        let series = |duration_minutes| MeetingSeries { id: 0, category_id: c.id, title: "Standup".into(), start_local: "2026-03-23T10:00".into(), duration_minutes, tz: "Europe/Berlin".into(), rrule: Some("FREQ=DAILY".into()) };
+        let skip = MeetingException { series_id: 0, original_start_local: "2026-03-24T10:00".into(), kind: "skip".into(), start_local: None, duration_minutes: None, title: None, category_id: None };
+
+        // The second series has a bad duration, so the first must not stay either.
+        let bad = [ImportedMeeting { series: series(30), exceptions: vec![skip.clone()] }, ImportedMeeting { series: series(0), exceptions: vec![] }];
+        assert!(import_meetings(&mut conn, &bad).is_err());
+        assert!(list_meetings(&conn).unwrap().is_empty());
+
+        import_meetings(&mut conn, &bad[..1]).unwrap();
+        let saved = list_meetings(&conn).unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(list_meeting_exceptions(&conn).unwrap(), vec![MeetingException { series_id: saved[0].id, ..skip }]);
     }
 
     #[test]
