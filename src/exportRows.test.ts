@@ -20,8 +20,8 @@ test("rows are in time order and a Meeting keeps its own zone", () => {
 test("Meetings and Absences become rows next to the Entries", () => {
   const start = Date.UTC(2026, 9, 26, 8, 0) / 1000; // 09:00 in Berlin
   const meeting = { seriesId: 1, categoryId: 2, title: "Sync", tz: "Europe/Berlin", startUtc: start, endUtc: start + 1800, originalStartLocal: "2026-10-26T09:00" };
-  const part = { id: 1, label: "Doctor", startDate: null, endDate: null, startUtc: start, endUtc: start + 3600, tz: "Europe/Berlin" };
-  const full = { id: 2, label: "Vacation", startDate: "2026-10-27", endDate: "2026-10-29", startUtc: null, endUtc: null, tz: null };
+  const part = { id: 1, kind: "Other" as const, label: "Doctor", startDate: null, endDate: null, startUtc: start, endUtc: start + 3600, tz: "Europe/Berlin" };
+  const full = { id: 2, kind: "Vacation" as const, label: "", startDate: "2026-10-27", endDate: "2026-10-29", startUtc: null, endUtc: null, tz: null };
   const rows = exportRows([], [meeting], [part, full], "Europe/Berlin", RANGE, (id) => `C${id}`);
   const A = "Absence (not worked)";
   expect(rows).toEqual([

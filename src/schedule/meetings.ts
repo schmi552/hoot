@@ -3,13 +3,19 @@ import { Temporal } from "temporal-polyfill";
 import type { Span } from "./schedule";
 
 /** A Meeting or a recurring Meeting. `startLocal` is "YYYY-MM-DDTHH:MM" on the wall clock of `tz`; `rrule` is null for a one-off. */
-export type MeetingSeries = { id: number; categoryId: number; title: string; startLocal: string; durationMinutes: number; tz: string; rrule: string | null };
+export type MeetingSeries = {
+  id: number; categoryId: number | null; title: string; startLocal: string; durationMinutes: number; tz: string; rrule: string | null;
+  /** The `.ics` file name; "" for an old import that did not keep it; null for a Meeting made by hand. */
+  sourceFile: string | null;
+};
+/** Where a series came from, for the edit form. Empty for a Meeting made by hand. */
+export const sourceText = (s: Pick<MeetingSeries, "sourceFile">) => (s.sourceFile === null ? "" : s.sourceFile ? `from ${s.sourceFile}` : "from .ics file");
 /** One changed occurrence of a series, found by its original wall-clock start. A skip removes it; an override replaces the fields that are set. */
 export type MeetingException = {
   seriesId: number; originalStartLocal: string; kind: "skip" | "override";
   startLocal: string | null; durationMinutes: number | null; title: string | null; categoryId: number | null;
 };
-export type MeetingOccurrence = Span & { seriesId: number; categoryId: number; title: string; tz: string; originalStartLocal: string };
+export type MeetingOccurrence = Span & { seriesId: number; categoryId: number | null; title: string; tz: string; originalStartLocal: string };
 
 export type Repeat = "none" | "daily" | "weekdays" | "weekly" | "monthly";
 export const REPEATS: Repeat[] = ["none", "daily", "weekdays", "weekly", "monthly"];

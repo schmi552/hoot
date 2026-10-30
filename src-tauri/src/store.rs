@@ -14,7 +14,7 @@ pub struct Category {
 }
 
 /// The schema version that the newest migration creates.
-pub const LATEST_VERSION: i64 = 6;
+pub const LATEST_VERSION: i64 = 7;
 
 /// Times are "HH:MM" in the zone `tz`. `effective_from` is not part of it: a save always starts today.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -121,6 +121,33 @@ pub fn migrations() -> Migrations<'static> {
                 AND NOT EXISTS (SELECT 1 FROM category c2 WHERE c2.name = trim(substr(category.name, instr(category.name, ' ') + 1)));
             UPDATE category SET name = trim(substr(name, length(code) + 2)) WHERE code <> '';
             CREATE UNIQUE INDEX category_code ON category(code) WHERE code <> '';",
+        ),
+        // An Absence has a kind. An old label that is a kind name (any case) becomes that kind with an empty label; any other label is kept under `Other`.
+        // A series may have no Category (an `.ics` import can come without one) and remembers the file it came from.
+        // SQLite cannot drop NOT NULL, so the series table is rebuilt. Foreign keys are on, so dropping the old table would delete the exceptions: they are saved and put back.
+        M::up(
+            "ALTER TABLE absence ADD COLUMN kind TEXT NOT NULL DEFAULT 'Other' CHECK (kind IN ('Vacation', 'Sick', 'Holiday', 'Other'));
+            UPDATE absence SET kind = CASE lower(label) WHEN 'vacation' THEN 'Vacation' WHEN 'sick' THEN 'Sick' WHEN 'holiday' THEN 'Holiday' ELSE 'Other' END,
+                                label = CASE WHEN lower(label) IN ('vacation', 'sick', 'holiday') THEN '' ELSE label END;
+            CREATE TABLE meeting_series_new (
+                id INTEGER PRIMARY KEY,
+                category_id INTEGER REFERENCES category(id),
+                title TEXT NOT NULL,
+                start_local TEXT NOT NULL,
+                duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+                tz TEXT NOT NULL,
+                rrule TEXT,
+                source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ics')),
+                ics_uid TEXT,
+                source_file TEXT
+            );
+            INSERT INTO meeting_series_new (id, category_id, title, start_local, duration_minutes, tz, rrule, source, ics_uid)
+                SELECT id, category_id, title, start_local, duration_minutes, tz, rrule, source, ics_uid FROM meeting_series;
+            CREATE TABLE exception_save AS SELECT * FROM meeting_exception;
+            DROP TABLE meeting_series;
+            ALTER TABLE meeting_series_new RENAME TO meeting_series;
+            INSERT INTO meeting_exception SELECT * FROM exception_save;
+            DROP TABLE exception_save;",
         ),
     ])
 }
@@ -313,26 +340,28 @@ pub fn list_categories(conn: &Connection) -> Result<Vec<Category>> {
 #[serde(rename_all = "camelCase")]
 pub struct MeetingSeries {
     pub id: i64,
-    pub category_id: i64,
+    pub category_id: Option<i64>,
     pub title: String,
     pub start_local: String,
     pub duration_minutes: i64,
     pub tz: String,
     pub rrule: Option<String>,
+    /// The name of the `.ics` file the series came from; empty for an old import that did not keep it. None for a series made by hand.
+    pub source_file: Option<String>,
 }
 
 /// Save a new Meeting series. The `id` of `m` is ignored.
 pub fn create_meeting(conn: &Connection, m: &MeetingSeries) -> Result<MeetingSeries> {
     conn.execute(
-        "INSERT INTO meeting_series (category_id, title, start_local, duration_minutes, tz, rrule) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        (m.category_id, &m.title, &m.start_local, m.duration_minutes, &m.tz, &m.rrule),
+        "INSERT INTO meeting_series (category_id, title, start_local, duration_minutes, tz, rrule, source, source_file) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        (m.category_id, &m.title, &m.start_local, m.duration_minutes, &m.tz, &m.rrule, if m.source_file.as_deref().is_some_and(|f| !f.is_empty()) { "ics" } else { "manual" }, &m.source_file),
     )?;
     Ok(MeetingSeries { id: conn.last_insert_rowid(), ..m.clone() })
 }
 
 /// All Meeting series. There are few, so TypeScript expands them for the visible range.
 pub fn list_meetings(conn: &Connection) -> Result<Vec<MeetingSeries>> {
-    conn.prepare("SELECT id, category_id, title, start_local, duration_minutes, tz, rrule FROM meeting_series ORDER BY id")?
+    conn.prepare("SELECT id, category_id, title, start_local, duration_minutes, tz, rrule, CASE WHEN source = 'ics' THEN COALESCE(source_file, '') END FROM meeting_series ORDER BY id")?
         .query_map([], |r| {
             Ok(MeetingSeries {
                 id: r.get(0)?,
@@ -342,6 +371,7 @@ pub fn list_meetings(conn: &Connection) -> Result<Vec<MeetingSeries>> {
                 duration_minutes: r.get(4)?,
                 tz: r.get(5)?,
                 rrule: r.get(6)?,
+                source_file: r.get(7)?,
             })
         })?
         .collect()
@@ -430,6 +460,8 @@ pub fn list_meeting_exceptions(conn: &Connection) -> Result<Vec<MeetingException
 #[serde(rename_all = "camelCase")]
 pub struct Absence {
     pub id: i64,
+    /// One of Vacation, Sick, Holiday, Other.
+    pub kind: String,
     pub label: String,
     pub start_date: Option<String>,
     pub end_date: Option<String>,
@@ -441,17 +473,17 @@ pub struct Absence {
 /// Save a new Absence. The `id` of `a` is ignored. The table refuses a row that is neither a full-day nor a part-day Absence.
 pub fn create_absence(conn: &Connection, a: &Absence) -> Result<Absence> {
     conn.execute(
-        "INSERT INTO absence (label, start_date, end_date, start_utc, end_utc, tz) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        (&a.label, &a.start_date, &a.end_date, a.start_utc, a.end_utc, &a.tz),
+        "INSERT INTO absence (kind, label, start_date, end_date, start_utc, end_utc, tz) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (&a.kind, &a.label, &a.start_date, &a.end_date, a.start_utc, a.end_utc, &a.tz),
     )?;
     Ok(Absence { id: conn.last_insert_rowid(), ..a.clone() })
 }
 
 /// All Absences. There are few, so TypeScript picks the ones in the visible range.
 pub fn list_absences(conn: &Connection) -> Result<Vec<Absence>> {
-    conn.prepare("SELECT id, label, start_date, end_date, start_utc, end_utc, tz FROM absence ORDER BY id")?
+    conn.prepare("SELECT id, kind, label, start_date, end_date, start_utc, end_utc, tz FROM absence ORDER BY id")?
         .query_map([], |r| {
-            Ok(Absence { id: r.get(0)?, label: r.get(1)?, start_date: r.get(2)?, end_date: r.get(3)?, start_utc: r.get(4)?, end_utc: r.get(5)?, tz: r.get(6)? })
+            Ok(Absence { id: r.get(0)?, kind: r.get(1)?, label: r.get(2)?, start_date: r.get(3)?, end_date: r.get(4)?, start_utc: r.get(5)?, end_utc: r.get(6)?, tz: r.get(7)? })
         })?
         .collect()
 }
@@ -625,7 +657,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut conn = crate::safety::open_safely(dir.path()).unwrap();
         let c = add_category(&conn, "", "A").unwrap();
-        let series = |duration_minutes| MeetingSeries { id: 0, category_id: c.id, title: "Standup".into(), start_local: "2026-03-23T10:00".into(), duration_minutes, tz: "Europe/Berlin".into(), rrule: Some("FREQ=DAILY".into()) };
+        let series = |duration_minutes| MeetingSeries { id: 0, category_id: Some(c.id), title: "Standup".into(), start_local: "2026-03-23T10:00".into(), duration_minutes, tz: "Europe/Berlin".into(), rrule: Some("FREQ=DAILY".into()), source_file: None };
         let skip = MeetingException { series_id: 0, original_start_local: "2026-03-24T10:00".into(), kind: "skip".into(), start_local: None, duration_minutes: None, title: None, category_id: None };
 
         // The second series has a bad duration, so the first must not stay either.
@@ -646,12 +678,13 @@ mod tests {
         let c = add_category(&conn, "", "A").unwrap();
         let m = MeetingSeries {
             id: 0,
-            category_id: c.id,
+            category_id: Some(c.id),
             title: "Standup".into(),
             start_local: "2026-03-23T10:00".into(),
             duration_minutes: 30,
             tz: "Europe/Berlin".into(),
             rrule: Some("FREQ=DAILY".into()),
+            source_file: None,
         };
 
         let saved = create_meeting(&conn, &m).unwrap();
@@ -667,7 +700,7 @@ mod tests {
         let c = add_category(&conn, "", "A").unwrap();
         let m = create_meeting(
             &conn,
-            &MeetingSeries { id: 0, category_id: c.id, title: "Standup".into(), start_local: "2026-03-23T10:00".into(), duration_minutes: 30, tz: "Europe/Berlin".into(), rrule: Some("FREQ=DAILY".into()) },
+            &MeetingSeries { id: 0, category_id: Some(c.id), title: "Standup".into(), start_local: "2026-03-23T10:00".into(), duration_minutes: 30, tz: "Europe/Berlin".into(), rrule: Some("FREQ=DAILY".into()), source_file: None },
         )
         .unwrap();
         let x = MeetingException { series_id: m.id, original_start_local: "2026-03-24T10:00".into(), kind: "skip".into(), start_local: None, duration_minutes: None, title: None, category_id: None };
@@ -692,8 +725,8 @@ mod tests {
     fn an_absence_of_either_kind_is_read_back_and_a_mixed_one_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
-        let full = Absence { id: 0, label: "Vacation".into(), start_date: Some("2026-08-03".into()), end_date: Some("2026-08-07".into()), start_utc: None, end_utc: None, tz: None };
-        let part = Absence { id: 0, label: "Doctor".into(), start_date: None, end_date: None, start_utc: Some(1000), end_utc: Some(4600), tz: Some("Europe/Berlin".into()) };
+        let full = Absence { id: 0, kind: "Vacation".into(), label: "".into(), start_date: Some("2026-08-03".into()), end_date: Some("2026-08-07".into()), start_utc: None, end_utc: None, tz: None };
+        let part = Absence { id: 0, kind: "Other".into(), label: "Doctor".into(), start_date: None, end_date: None, start_utc: Some(1000), end_utc: Some(4600), tz: Some("Europe/Berlin".into()) };
 
         let saved = vec![create_absence(&conn, &full).unwrap(), create_absence(&conn, &part).unwrap()];
 
@@ -850,5 +883,49 @@ mod tests {
         let b = add_category(&conn, "", "b").unwrap();
 
         assert!(update_category(&conn, b.id, "1", b.color).is_err());
+    }
+
+    #[test]
+    fn the_migration_turns_old_absence_labels_into_kinds() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut conn, 6).unwrap();
+        for l in ["Vacation", "sick", "HoLiDaY", "Doctor", "Sick leave"] {
+            conn.execute("INSERT INTO absence (label, start_date, end_date) VALUES (?1, '2026-08-03', '2026-08-03')", [l]).unwrap();
+        }
+
+        migrations().to_latest(&mut conn).unwrap();
+
+        let got: Vec<(String, String)> = list_absences(&conn).unwrap().into_iter().map(|a| (a.kind, a.label)).collect();
+        let want = [("Vacation", ""), ("Sick", ""), ("Holiday", ""), ("Other", "Doctor"), ("Other", "Sick leave")];
+        assert_eq!(got, want.map(|(k, l)| (k.to_string(), l.to_string())));
+    }
+
+    #[test]
+    fn the_database_refuses_an_unknown_absence_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let a = Absence { id: 0, kind: "Sick".into(), label: "".into(), start_date: Some("2026-08-03".into()), end_date: Some("2026-08-03".into()), start_utc: None, end_utc: None, tz: None };
+
+        assert!(create_absence(&conn, &a).is_ok());
+        assert!(create_absence(&conn, &Absence { kind: "Nap".into(), ..a }).is_err());
+    }
+
+    #[test]
+    fn a_series_without_a_category_is_saved_with_its_source_file_and_old_series_keep_their_exceptions() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut conn, 6).unwrap();
+        conn.execute("INSERT INTO category (name) VALUES ('A')", []).unwrap();
+        conn.execute("INSERT INTO meeting_series (category_id, title, start_local, duration_minutes, tz, source) VALUES (1, 'old', '2026-03-23T10:00', 30, 'UTC', 'ics')", []).unwrap();
+        conn.execute("INSERT INTO meeting_exception (series_id, original_start_local, kind) VALUES (1, '2026-03-24T10:00', 'skip')", []).unwrap();
+
+        migrations().to_latest(&mut conn).unwrap();
+
+        let old = list_meetings(&conn).unwrap();
+        assert_eq!((old[0].category_id, old[0].source_file.clone()), (Some(1), Some("".to_string())), "an old import has no file name");
+        assert_eq!(list_meeting_exceptions(&conn).unwrap().len(), 1);
+        let m = MeetingSeries { id: 0, category_id: None, title: "New".into(), start_local: "2026-03-23T10:00".into(), duration_minutes: 30, tz: "UTC".into(), rrule: None, source_file: Some("work.ics".into()) };
+        let saved = create_meeting(&conn, &m).unwrap();
+        assert_eq!(list_meetings(&conn).unwrap()[1], saved);
+        assert_eq!(saved.source_file.as_deref(), Some("work.ics"));
     }
 }

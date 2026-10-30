@@ -25,7 +25,7 @@ test("a weekly event keeps its RRULE, its cancelled date as a skip and its chang
 
 test("the parsed series expands with the skip and the override applied", () => {
   const [m] = parseIcs(cal(weekly, moved), "Europe/Berlin").meetings;
-  const series = { id: 1, categoryId: 1, ...m };
+  const series = { id: 1, categoryId: 1, sourceFile: null, ...m };
   const occ = expandMeetings([series], m.exceptions.map((x) => ({ ...x, seriesId: 1 })), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 23 }, 0), instantAt("Europe/Berlin", { y: 2026, m: 4, d: 14 }, 0));
   expect(occ.map((o) => o.title)).toEqual(["Standup", "Standup (moved)", "Standup"]); // 23 March, 6 April moved, 13 April
 });
@@ -67,7 +67,7 @@ test("an override on a day that is also an EXDATE wins, and an UNTIL ends the se
   const over = ["UID:a", "RECURRENCE-ID;TZID=Europe/Berlin:20260324T100000", "SUMMARY:S2", "DTSTART;TZID=Europe/Berlin:20260324T110000", "DTEND;TZID=Europe/Berlin:20260324T113000"].join("\r\n");
   const [m] = parseIcs(cal(ev, over), "Europe/Berlin").meetings;
   expect(m.exceptions.map((x) => x.kind)).toEqual(["override"]);
-  const occ = expandMeetings([{ id: 1, categoryId: 1, ...m }], m.exceptions.map((x) => ({ ...x, seriesId: 1 })), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 23 }, 0), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 30 }, 0));
+  const occ = expandMeetings([{ id: 1, categoryId: 1, sourceFile: null, ...m }], m.exceptions.map((x) => ({ ...x, seriesId: 1 })), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 23 }, 0), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 30 }, 0));
   expect(occ.map((o) => o.title)).toEqual(["S", "S2", "S"]); // 23, 24 (moved), 25; the series ends after the 25th
 });
 

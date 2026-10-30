@@ -169,7 +169,7 @@ test("an Absence reduces the expected time of a day and is not logged time", () 
   const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
   const monday = { y: 2026, m: 8, d: 3 };
   const at = (h: number) => instantAt(s.tz, monday, h * 60);
-  const none = { id: 0, label: "", startDate: null, endDate: null, startUtc: null, endUtc: null, tz: null };
+  const none = { id: 0, kind: "Other" as const, label: "", startDate: null, endDate: null, startUtc: null, endUtc: null, tz: null };
   const part = absenceSpans([{ ...none, startUtc: at(14), endUtc: at(16), tz: s.tz }], s.tz);
   const twoDays = absenceSpans([{ ...none, startDate: "2026-08-03", endDate: "2026-08-04" }], s.tz);
 
@@ -184,7 +184,7 @@ test("no popup is due during an Absence", () => {
   const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
   const day = { y: 2026, m: 8, d: 3 };
   const now = instantAt(s.tz, day, 10 * 60);
-  const off = absenceSpans([{ id: 0, label: "", startDate: "2026-08-03", endDate: "2026-08-03", startUtc: null, endUtc: null, tz: null }], s.tz);
+  const off = absenceSpans([{ id: 0, kind: "Other" as const, label: "", startDate: "2026-08-03", endDate: "2026-08-03", startUtc: null, endUtc: null, tz: null }], s.tz);
 
   expect(popupDue(s, now, [], 0, [])).not.toBeNull();
   expect(popupDue(s, now, [], 0, off)).toBeNull();

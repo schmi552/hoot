@@ -1,4 +1,4 @@
-import type { Absence } from "./schedule/absences";
+import { type Absence, absenceTitle } from "./schedule/absences";
 import type { MeetingOccurrence } from "./schedule/meetings";
 import { dateKey, instantAt, minutesBetween, Span, ymdIn } from "./schedule/schedule";
 
@@ -38,15 +38,15 @@ export function exportRows(entries: Entry[], meetings: MeetingOccurrence[], abse
         .filter((date) => date >= range.from && date <= range.to)
         .map((date) => {
           const [y, m, d] = date.split("-").map(Number);
-          return { startUtc: instantAt(tz, { y, m, d }), date, start: "", end: "", minutes: 0, category: ABSENCE_CATEGORY, description: a.label, absence: true };
+          return { startUtc: instantAt(tz, { y, m, d }), date, start: "", end: "", minutes: 0, category: ABSENCE_CATEGORY, description: absenceTitle(a), absence: true };
         });
     }
-    const r = row(tz, { startUtc: a.startUtc!, endUtc: a.endUtc! }, ABSENCE_CATEGORY, a.label, true);
+    const r = row(tz, { startUtc: a.startUtc!, endUtc: a.endUtc! }, ABSENCE_CATEGORY, absenceTitle(a), true);
     return r.date >= range.from && r.date <= range.to ? [r] : [];
   });
   return [
     ...entries.map((e) => row(e.tz, e, categoryName(e.categoryId), e.description)),
-    ...meetings.map((m) => row(m.tz, m, categoryName(m.categoryId), m.title)),
+    ...meetings.map((m) => row(m.tz, m, m.categoryId === null ? "" : categoryName(m.categoryId), m.title)),
     ...absenceRows,
   ]
     .sort((a, b) => a.startUtc - b.startUtc)

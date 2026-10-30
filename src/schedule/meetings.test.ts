@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { expandMeetings, ruleFor, type MeetingException, type MeetingSeries } from "./meetings";
+import { expandMeetings, ruleFor, sourceText, type MeetingException, type MeetingSeries } from "./meetings";
 import { instantAt } from "./schedule";
 import { gapDue, popupDue, subtractSpans } from "./schedule";
 
 const series = (over: Partial<MeetingSeries> = {}): MeetingSeries => ({
-  id: 1, categoryId: 1, title: "Standup", startLocal: "2026-03-23T10:00", durationMinutes: 30, tz: "Europe/Berlin", rrule: null, ...over,
+  id: 1, categoryId: 1, title: "Standup", startLocal: "2026-03-23T10:00", durationMinutes: 30, tz: "Europe/Berlin", rrule: null, sourceFile: null, ...over,
 });
 const at = (day: number, hm: number, month = 3) => instantAt("Europe/Berlin", { y: 2026, m: month, d: day }, hm);
 
@@ -91,4 +91,10 @@ test("no popup shows during a Meeting and the popup span skips it", () => {
 test("a Gap leaves Meetings out", () => {
   const meeting = [{ startUtc: at(23, 540), endUtc: at(23, 660) }]; // 09:00-11:00
   expect(gapDue(s, at(23, 700), [], 0, meeting)).toBeNull(); // only 11:00-11:40 is left
+});
+
+test("a series says where it came from", () => {
+  expect(sourceText({ sourceFile: null })).toBe("");
+  expect(sourceText({ sourceFile: "" })).toBe("from .ics file");
+  expect(sourceText({ sourceFile: "work.ics" })).toBe("from work.ics");
 });
