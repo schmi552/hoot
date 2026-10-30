@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import FullCalendar, { CalendarRef } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
@@ -206,6 +206,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       }}
     >
       <button className="wt-chip" onClick={onSettings}>Settings</button>
+      {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
       {slot && (
         <form

@@ -31,21 +31,24 @@ export function Popup() {
   };
 
   useEffect(() => {
-    const unlisten = listen<{ nowUtc: number }>("tick", async ({ payload: { nowUtc } }) => {
+    // `force` is the debug button: it opens the popup even when no popup is due.
+    const check = async (nowUtc: number, force = false) => {
       if (asking.current) return;
       const settings = await invoke<Settings | null>("get_settings");
       if (!settings) return;
       const entries = await invoke<Entry[]>("list_entries", { fromUtc: nowUtc - HISTORY_DAYS * 86_400, toUtc: nowUtc });
-      const spans = popupDue(settings, nowUtc, entries, lastPrompt.current);
+      const spans = popupDue(settings, nowUtc, entries, lastPrompt.current) ?? (force ? [{ startUtc: nowUtc - settings.intervalMinutes * 60, endUtc: nowUtc }] : null);
       if (!spans || asking.current) return;
       const categories = await invoke<Category[]>("list_categories");
       const last = entries.filter((e) => e.endUtc === spans[0].startUtc)[0] ?? null; // only an Entry that touches the span can be extended
       const today = dateKey(ymdIn(settings.tz, nowUtc));
       const askLocation = !(await invoke<unknown[]>("list_workday_locations", { from: today, to: today })).length; // the first popup of the day
       show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation });
-    });
+    };
+    const unlisten = listen<{ nowUtc: number }>("tick", ({ payload }) => check(payload.nowUtc));
+    const debug = listen("debug-popup", () => check(Math.floor(Date.now() / 1000), true));
     const closed = listen("popup-closed", () => asking.current && finish(Date.now() / 1000)); // closed with the window button
-    return () => void [unlisten, closed].forEach((u) => u.then((f) => f()));
+    return () => void [unlisten, debug, closed].forEach((u) => u.then((f) => f()));
   }, []);
 
   if (!ask) return null;
