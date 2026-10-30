@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import sample from "./fixtures/sample.ics?raw";
 import { parseIcs } from "./ics";
 import { expandMeetings } from "./meetings";
 import { instantAt } from "./schedule";
@@ -68,4 +69,13 @@ test("an override on a day that is also an EXDATE wins, and an UNTIL ends the se
   expect(m.exceptions.map((x) => x.kind)).toEqual(["override"]);
   const occ = expandMeetings([{ id: 1, categoryId: 1, ...m }], m.exceptions.map((x) => ({ ...x, seriesId: 1 })), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 23 }, 0), instantAt("Europe/Berlin", { y: 2026, m: 3, d: 30 }, 0));
   expect(occ.map((o) => o.title)).toEqual(["S", "S2", "S"]); // 23, 24 (moved), 25; the series ends after the 25th
+});
+
+test("the sample file parses: Windows zone, EXDATE, moved occurrence and an unknown TZID", () => {
+  const { meetings, warnings } = parseIcs(sample, "Europe/Berlin");
+  expect(meetings.map((m) => [m.title, m.tz, m.startLocal, m.exceptions.map((x) => x.kind)])).toEqual([
+    ["Team standup", "Europe/Berlin", "2026-11-02T10:00", ["skip", "override"]],
+    ["Odd zone", "Europe/Berlin", "2026-11-03T15:00", []],
+  ]);
+  expect(warnings).toEqual(['Unknown time zone "Customized Time Zone": its times are read as local time.']);
 });
