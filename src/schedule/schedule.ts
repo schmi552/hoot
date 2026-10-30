@@ -99,3 +99,40 @@ export function nextFreeSlot(entries: (Span & { id: number })[], span: Span): Sp
   }
   return { startUtc, endUtc: startUtc + len };
 }
+
+type WorkHours = { workStart: string; workEnd: string; lunchStart: string; lunchEnd: string; tz: string; intervalMinutes: number };
+
+/** The parts of [fromUtc, toUtc] that are work time on the day of `toUtc`: inside work hours, lunch cut out, whole minutes. Empty on a weekend. */
+export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number): Span[] {
+  const day = ymdIn(s.tz, toUtc);
+  if ([0, 6].includes(weekday(day))) return [];
+  const at = (hm: string) => instantAt(s.tz, day, parseHM(hm));
+  const end = toUtc - (toUtc % 60);
+  return [[s.workStart, s.lunchStart], [s.lunchEnd, s.workEnd]]
+    .map(([a, b]) => ({ startUtc: Math.max(at(a), fromUtc), endUtc: Math.min(at(b), end) }))
+    .filter((p) => p.endUtc > p.startUtc);
+}
+
+/**
+ * The time a popup at `nowUtc` asks about, or null if no popup is due. A popup is due when a full interval has passed since
+ * the last Entry ended, the last popup was answered or skipped (`lastPromptUtc`), or work began today, whichever is latest.
+ */
+export function popupDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number): Span[] | null {
+  const lastEnd = Math.max(0, ...entries.filter((e) => e.endUtc <= nowUtc).map((e) => e.endUtc));
+  const workStart = instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(s.workStart));
+  if (nowUtc - Math.max(lastEnd, lastPromptUtc, workStart) < s.intervalMinutes * 60) return null;
+  const spans = popupSpans(s, lastEnd, nowUtc);
+  // Ask only while work is going on: the cut-out spans may still hold unlogged time, but not at lunch or after work.
+  const inside = (a: string, b: string) => nowUtc >= instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(a)) && nowUtc < instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(b));
+  const working = inside(s.workStart, s.workEnd) && !inside(s.lunchStart, s.lunchEnd);
+  return working && spans.length ? spans : null;
+}
+
+/** The last `n` different Entries (description plus Category), newest first. */
+export function recentEntries<T extends Span & { categoryId: number; description: string }>(entries: T[], n = 3): T[] {
+  const seen = new Set<string>();
+  return [...entries]
+    .sort((a, b) => b.startUtc - a.startUtc)
+    .filter((e) => !seen.has(`${e.categoryId}|${e.description}`) && seen.add(`${e.categoryId}|${e.description}`))
+    .slice(0, n);
+}

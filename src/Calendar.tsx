@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import FullCalendar, { CalendarRef } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
@@ -49,6 +50,10 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     invoke<Entry[]>("list_entries", { fromUtc: range[0], toUtc: range[1] }).then((e) => stale || setEntries(e));
     return () => void (stale = true);
   }, [range, reload]);
+  useEffect(() => {
+    const unlisten = listen("entries-changed", load); // the popup saved an Entry
+    return () => void unlisten.then((f) => f());
+  }, []);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);

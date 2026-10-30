@@ -175,3 +175,7 @@
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
 .wt-selected { outline: 2px solid var(--calendar-fg); outline-offset: 1px; }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }
+
+/* The popup fills its own window. */
+.wt-popup--window { display: flex; flex-direction: column; height: 100vh; border-radius: 0; }
+.wt-popup--window .wt-thread { flex: 1; max-height: none; }

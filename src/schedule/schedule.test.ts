@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, resizedEnd } from "./schedule";
+import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, popupDue, popupSpans, recentEntries, resizedEnd } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -69,4 +69,60 @@ test("a resize stops at the next Entry and keeps one step of length", () => {
 test("a duplicate goes into the next free slot after the original", () => {
   expect(nextFreeSlot(day, { startUtc: 1000, endUtc: 2000 })).toEqual({ startUtc: 4000, endUtc: 5000 });
   expect(nextFreeSlot(day, { startUtc: 3600, endUtc: 4000 })).toEqual({ startUtc: 4000, endUtc: 4400 });
+});
+
+const hours = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 60 };
+const friday = { y: 2026, m: 10, d: 30 };
+const at = (h: number, m = 0, ymd = friday) => instantAt("UTC", ymd, h * 60 + m);
+const span = (a: number, b: number, bm = 0) => ({ startUtc: at(a), endUtc: at(b, bm) });
+
+test("the popup span runs from the end of the last Entry to now", () => {
+  expect(popupSpans(hours, at(10), at(11, 30))).toEqual([span(10, 11, 30)]);
+});
+
+test("the popup span starts at the start of work hours if the last Entry ended earlier", () => {
+  expect(popupSpans(hours, at(7), at(10))).toEqual([span(9, 10)]);
+});
+
+test("the popup span cuts out lunch", () => {
+  expect(popupSpans(hours, at(11), at(14))).toEqual([span(11, 12), span(13, 14)]);
+});
+
+test("the popup span ends at the end of work hours and keeps minute precision", () => {
+  expect(popupSpans(hours, at(16), at(18))).toEqual([span(16, 17)]);
+  expect(popupSpans(hours, at(10, 7), at(10, 41) + 30)).toEqual([{ startUtc: at(10, 7), endUtc: at(10, 41) }]);
+});
+
+test("there is no popup span on a weekend", () => {
+  const saturday = { y: 2026, m: 10, d: 31 };
+  expect(popupSpans(hours, at(9, 0, saturday), at(11, 0, saturday))).toEqual([]);
+});
+
+test("a popup is due when a full interval has passed since the last Entry", () => {
+  const entries = [span(9, 10)];
+  expect(popupDue(hours, at(10, 59), entries, 0)).toBeNull();
+  expect(popupDue(hours, at(11), entries, 0)).toEqual([span(10, 11)]);
+});
+
+test("a skipped or snoozed popup delays the next one", () => {
+  expect(popupDue(hours, at(11), [span(9, 10)], at(10, 30))).toBeNull();
+  expect(popupDue(hours, at(11, 30), [span(9, 10)], at(10, 30))).toEqual([span(10, 11, 30)]);
+});
+
+test("the first popup of the day comes one interval after work starts", () => {
+  expect(popupDue(hours, at(9, 59), [], 0)).toBeNull();
+  expect(popupDue(hours, at(10), [], 0)).toEqual([span(9, 10)]);
+});
+
+test("no popup during lunch or outside work hours", () => {
+  expect(popupDue(hours, at(12, 30), [span(9, 11)], 0)).toBeNull();
+  expect(popupDue(hours, at(13), [span(9, 11)], 0)).toEqual([span(11, 12)]);
+  expect(popupDue(hours, at(18), [span(9, 16)], 0)).toBeNull();
+  expect(popupDue(hours, at(8), [], 0)).toBeNull();
+});
+
+test("recent Entries are the last three different ones, newest first", () => {
+  const e = (startUtc: number, categoryId: number, description: string) => ({ startUtc, endUtc: startUtc + 1, categoryId, description });
+  const list = [e(1, 1, "a"), e(2, 2, "b"), e(3, 1, "a"), e(4, 1, "c"), e(5, 3, "d")];
+  expect(recentEntries(list).map((x) => x.startUtc)).toEqual([5, 4, 3]);
 });

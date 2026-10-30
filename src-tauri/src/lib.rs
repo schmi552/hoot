@@ -4,7 +4,8 @@ mod store;
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 struct Db(Mutex<rusqlite::Connection>);
 
@@ -102,6 +103,38 @@ fn quit(app: AppHandle) {
     app.exit(0);
 }
 
+/// Show or hide the always-on-top popup window. The window is created hidden at startup.
+#[tauri::command]
+fn set_popup_visible(app: AppHandle, visible: bool) {
+    if let Some(w) = app.get_webview_window("popup") {
+        let _ = if visible { w.show().and_then(|_| w.set_focus()) } else { w.hide() };
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Tick {
+    now_utc: i64,
+    /// Seconds since the last tick. Much more than 60 means sleep, wake or a closed app.
+    elapsed_secs: i64,
+}
+
+/// Emit a `tick` event every minute by wall clock, once the database is open.
+fn start_ticker(app: AppHandle) {
+    std::thread::spawn(move || {
+        let now = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        let mut last = now();
+        loop {
+            std::thread::sleep(Duration::from_secs(60 - (now() % 60) as u64)); // wake on the minute
+            let (now_utc, elapsed_secs) = (now(), now() - last);
+            last = now_utc;
+            if app.try_state::<Db>().is_some() {
+                let _ = app.emit("tick", Tick { now_utc, elapsed_secs });
+            }
+        }
+    });
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -114,7 +147,7 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            // Without a database no other part of the app starts (the popup timer comes later).
+            // Without a database no other part of the app starts (the ticker waits for the database).
             match safety::open_safely(&dir) {
                 Ok(conn) => {
                     app.manage(Db(Mutex::new(conn)));
@@ -141,12 +174,14 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
+            start_ticker(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let (WindowEvent::CloseRequested { api, .. }, "main") = (event, window.label()) {
+            if let (WindowEvent::CloseRequested { api, .. }, "main" | "popup") = (event, window.label()) {
                 api.prevent_close();
                 let _ = window.hide();
+                let _ = window.emit("popup-closed", ()); // the popup page must stop waiting for an answer
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -163,6 +198,7 @@ pub fn run() {
             start_empty,
             restore_latest_backup,
             show_backups_folder,
+            set_popup_visible,
             quit
         ])
         .run(tauri::generate_context!())
