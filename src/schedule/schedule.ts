@@ -118,6 +118,7 @@ export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number): Span[]
  * the last Entry ended, the last popup was answered or skipped (`lastPromptUtc`), or work began today, whichever is latest.
  */
 export function popupDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number): Span[] | null {
+  if (entries.some((e) => e.startUtc <= nowUtc && e.endUtc > nowUtc)) return null; // an Entry already covers now
   const lastEnd = Math.max(0, ...entries.filter((e) => e.endUtc <= nowUtc).map((e) => e.endUtc));
   const workStart = instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(s.workStart));
   if (nowUtc - Math.max(lastEnd, lastPromptUtc, workStart) < s.intervalMinutes * 60) return null;

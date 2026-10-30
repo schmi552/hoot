@@ -57,6 +57,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
   const [categoryId, setCategoryId] = useState(recents[0]?.categoryId ?? categories[0]?.id ?? 0);
   const [error, setError] = useState(categories.length ? "" : "Add a Category in Settings first.");
   const [saved, setSaved] = useState(false);
+  const written = useRef(0); // spans already stored, so a retry after a failure does not store them twice
   const input = useRef<HTMLInputElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const time = (t: number) => new Date(t * 1000).toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" });
@@ -70,13 +71,14 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
     if (!source.description) return setError("Type what you did.");
     if (!source.categoryId) return setError("Pick a Category.");
     const answer = still ? "Yes, still" : `${source.description} (${category?.name})`;
-    const [first, ...rest] = spans;
     const create = (s: Span) => invoke("create_entry", { entry: { id: 0, categoryId: source.categoryId, description: source.description, startUtc: s.startUtc, endUtc: s.endUtc, tz: settings.tz } });
     try {
       // Lunch can split the span in two: the first part extends the last Entry, the rest are new.
-      if (still) await invoke("update_entry", { entry: { ...last, endUtc: first.endUtc } });
-      else await create(first);
-      for (const s of rest) await create(s);
+      for (; written.current < spans.length; written.current++) {
+        const s = spans[written.current];
+        if (still && written.current === 0) await invoke("update_entry", { entry: { ...last, endUtc: s.endUtc } });
+        else await create(s);
+      }
     } catch (e) {
       return setError(String(e)); // the answer stays in the form, so Enter tries again
     }

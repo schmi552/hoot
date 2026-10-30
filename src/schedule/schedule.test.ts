@@ -126,3 +126,7 @@ test("recent Entries are the last three different ones, newest first", () => {
   const list = [e(1, 1, "a"), e(2, 2, "b"), e(3, 1, "a"), e(4, 1, "c"), e(5, 3, "d")];
   expect(recentEntries(list).map((x) => x.startUtc)).toEqual([5, 4, 3]);
 });
+
+test("no popup while an Entry covers the present", () => {
+  expect(popupDue(hours, at(11), [span(9, 10), span(10, 12)], 0)).toBeNull();
+});
