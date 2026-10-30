@@ -15,6 +15,9 @@ pub struct Row {
     pub minutes: u32,
     pub category: String,
     pub description: String,
+    /// An Absence row. It is listed in sheet 1 but does not count as logged hours.
+    #[serde(default)]
+    pub absence: bool,
 }
 
 /// The Workday location ("Home" or "Office") of one day.
@@ -55,9 +58,9 @@ fn build(export: &Export) -> Result<Workbook, String> {
         sheet.write_string(i, 6, location_of.get(r.date.as_str()).copied().unwrap_or("")).map_err(|e| e.to_string())?;
     }
 
-    let categories: Vec<&str> = export.rows.iter().map(|r| r.category.as_str()).collect::<BTreeSet<_>>().into_iter().collect();
+    let categories: Vec<&str> = export.rows.iter().filter(|r| !r.absence).map(|r| r.category.as_str()).collect::<BTreeSet<_>>().into_iter().collect();
     let mut per_day: BTreeMap<&str, BTreeMap<&str, u32>> = BTreeMap::new();
-    for r in &export.rows {
+    for r in export.rows.iter().filter(|r| !r.absence) {
         *per_day.entry(&r.date).or_default().entry(&r.category).or_default() += r.minutes;
     }
     for d in &export.days {
@@ -104,7 +107,7 @@ mod tests {
     use calamine::{open_workbook, Data, Reader, Xlsx};
 
     fn row(date: &str, minutes: u32, category: &str, description: &str) -> Row {
-        Row { date: date.into(), start: "09:00".into(), end: "10:00".into(), minutes, category: category.into(), description: description.into() }
+        Row { date: date.into(), start: "09:00".into(), end: "10:00".into(), minutes, category: category.into(), description: description.into(), absence: false }
     }
     fn sample() -> Export {
         Export {
@@ -136,6 +139,24 @@ mod tests {
         assert_eq!(days[2], ["2026-10-27", "Office", "0.5", "0"]);
         assert_eq!(days[3], ["2026-10-28", "Home", "0", "0"]);
         assert!(!dir.path().join("report.xlsx.tmp").exists());
+    }
+
+    #[test]
+    fn lists_absences_but_does_not_count_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("report.xlsx");
+        let mut export = sample();
+        export.rows.push(row("2026-10-28", 480, "Absence", "Vacation"));
+        export.rows.last_mut().unwrap().absence = true;
+        export.rows.push(row("2026-10-28", 60, "A", "Weekly sync")); // a Meeting counts like an Entry
+        write(&path, &export).unwrap();
+        let mut book: Xlsx<_> = open_workbook(&path).unwrap();
+        let entries = text(&book.worksheet_range("Entries").unwrap());
+        assert_eq!(entries.len(), 6);
+        assert_eq!(entries[4], ["2026-10-28", "09:00", "10:00", "8", "Absence", "Vacation", "Home"]);
+        let days = text(&book.worksheet_range("Hours per day").unwrap());
+        assert_eq!(days[0], ["Date", "Location", "A", "B"]);
+        assert_eq!(days[3], ["2026-10-28", "Home", "1", "0"]);
     }
 
     #[test]

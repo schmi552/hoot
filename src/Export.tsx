@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { exportDays, exportRows } from "./exportRows";
+import { Absence, absenceSpans } from "./schedule/absences";
+import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
 import { dateKey, dayBoundsIn, ymdIn } from "./schedule/schedule";
 import type { Settings } from "./Settings";
 
@@ -11,7 +13,7 @@ const parseDay = (s: string) => {
   return { y, m, d };
 };
 
-/** Pick a timeframe and write the Entries in it to an Excel file. After a failure the dialog stays open. */
+/** Pick a timeframe and write the Entries, Meetings and Absences in it to an Excel file. After a failure the dialog stays open. */
 export function ExportDialog({ settings, onClose }: { settings: Settings; onClose: () => void }) {
   const today = dateKey(ymdIn(settings.tz, Date.now() / 1000));
   const [from, setFrom] = useState(today);
@@ -28,13 +30,18 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
     try {
       const [fromUtc] = dayBoundsIn(settings.tz, parseDay(from));
       const [, toUtc] = dayBoundsIn(settings.tz, parseDay(to));
-      const [entries, categories, locations] = await Promise.all([
+      const [entries, categories, locations, series, exceptions, absences] = await Promise.all([
         invoke<any[]>("list_entries", { fromUtc, toUtc }),
         invoke<Category[]>("list_categories"),
         invoke<{ date: string; location: string }[]>("list_workday_locations", { from, to }),
+        invoke<MeetingSeries[]>("list_meetings"),
+        invoke<MeetingException[]>("list_meeting_exceptions"),
+        invoke<Absence[]>("list_absences"),
       ]);
+      const meetings = expandMeetings(series, exceptions, fromUtc, toUtc);
+      const inRange = absenceSpans(absences, settings.tz).map((s) => s.startUtc < toUtc && s.endUtc > fromUtc);
       const name = (id: number) => categories.find((c) => c.id === id)?.name ?? "Archived";
-      await invoke("export_xlsx", { path: target, export: { rows: exportRows(entries, name), days: exportDays(locations) } });
+      await invoke("export_xlsx", { path: target, export: { rows: exportRows(entries, meetings, absences.filter((_, i) => inRange[i]), settings.tz, name), days: exportDays(locations) } });
       setMessage(`Saved ${target}`);
     } catch (e) {
       setMessage(String(e));
