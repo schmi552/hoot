@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { needsStartDate, nextMonday, validate } from "./Settings";
+import { needsStartDate, nextMonday, timeProblems, validate } from "./Settings";
 
 const ok = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 60, workdays: "12345" };
 
@@ -24,4 +24,10 @@ test("the start date shows only when Expected per day or the Workdays change", (
   expect(needsStartDate({ ...ok, intervalMinutes: 30 }, ok)).toBe(false);
   expect(needsStartDate({ ...ok, workEnd: "18:00" }, ok)).toBe(true);
   expect(needsStartDate({ ...ok, workdays: "1234" }, ok)).toBe(true);
+});
+test("each time problem is named for its part", () => {
+  expect(timeProblems({ ...ok, workEnd: "08:00" }).work).not.toBe("");
+  expect(timeProblems({ ...ok, lunchEnd: "18:00" })).toMatchObject({ work: "" });
+  expect(timeProblems({ ...ok, lunchEnd: "18:00" }).lunch).not.toBe("");
+  expect(timeProblems({ ...ok, workStart: "" }).work).not.toBe("");
 });

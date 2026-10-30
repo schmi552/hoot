@@ -188,6 +188,7 @@
 
 /* Focus ring: 2 px, offset 2 px. Inputs: offset 0, the border turns to the focus color. */
 .wt-popup :focus-visible,
+.wt-ob :focus-visible,
 .wt-startup :focus-visible,
 .wt-calendar :focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .wt-input:focus-visible { outline-offset: 0; border-color: var(--input-border-focus); }
@@ -204,6 +205,57 @@
 
 .wt-form { display: grid; gap: var(--space-sm); }
 .wt-row { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; }
+
+/* ---------- Onboarding and shared fields. From the onboarding board. ---------- */
+.wt-field { display: flex; flex-direction: column; gap: 6px; }
+.wt-field .wt-label { min-width: 0; }
+.wt-time { box-sizing: border-box; width: var(--time-field-width); font-family: var(--font-mono); }
+.wt-chips { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.wt-day-chip { padding: 0 var(--space-md); }
+.wt-mono { font-family: var(--font-mono); }
+.wt-hint { font-size: var(--text-caption); color: var(--color-text-muted); }
+.wt-check { display: flex; gap: var(--space-sm); align-items: center; min-height: var(--input-height); cursor: pointer; }
+.wt-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-accent); }
+.wt-icon-btn {
+  width: var(--input-height); height: var(--input-height); flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--color-text-muted); border: 0; border-radius: var(--radius-control);
+  cursor: pointer;
+}
+button.wt-icon-btn:hover { color: var(--color-text); }
+
+.wt-ob {
+  min-height: 100vh;
+  padding: var(--space-2xl) var(--space-lg);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font: var(--text-body) / var(--leading-body) var(--font-body);
+}
+.wt-ob-inner { max-width: var(--onboarding-max-width); margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.wt-ob-hello { display: flex; gap: var(--space-md); align-items: flex-end; }
+.wt-ob-bubble { display: flex; flex-direction: column; gap: 6px; padding: var(--space-md) var(--space-lg); max-width: none; background: var(--bubble-bot-bg); border: var(--border-width) solid var(--bubble-bot-border); border-radius: var(--bubble-radius) var(--bubble-radius) var(--bubble-radius) var(--bubble-tail-radius); }
+.wt-ob-bubble h1 { margin: 0; font: 600 var(--text-display) / 1.2 var(--font-display); }
+.wt-ob-card { display: flex; flex-direction: column; background: var(--color-surface); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-container); }
+.wt-step {
+  margin: 0; padding: 20px var(--space-xl); border: 0; border-bottom: var(--border-width) solid var(--color-border);
+  display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--space-md) var(--space-sm);
+}
+.wt-step-n { font: 600 var(--text-title) var(--font-display); color: var(--color-accent); }
+.wt-step-body { display: flex; flex-direction: column; gap: var(--space-md); }
+.wt-step-title { font-weight: 600; }
+.wt-step-title .wt-sub { font-weight: 400; }
+.wt-fields { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: flex-end; }
+.wt-ob .wt-error:empty { display: none; }
+.wt-step .wt-error { margin: calc(-1 * var(--space-sm)) 0 0; }
+.wt-cat-rows { display: flex; flex-direction: column; gap: var(--space-sm); }
+.wt-cat-rows .wt-error { margin: 2px 0 0 calc(14px + var(--space-sm)); }
+.wt-cat-row { display: flex; gap: var(--space-sm); align-items: center; }
+.wt-cat-row .wt-input { flex: 1; min-width: 0; }
+.wt-cat-row .wt-code { flex: none; width: var(--code-field-width); font-family: var(--font-mono); }
+.wt-dot { --dot: var(--cat-1-solid); width: 14px; height: 14px; flex: none; border-radius: var(--radius-control); background: var(--dot); }
+.wt-dot.is-empty { background: none; border: 1.5px dashed var(--dot); box-sizing: border-box; }
+.wt-ob-foot { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: center; justify-content: space-between; padding: var(--space-lg) var(--space-xl); }
+.wt-start { padding: 0 18px; font-weight: 600; }
 
 /* ---------- Week view. The --fc-classic-* variables belong to FullCalendar's classic theme. ---------- */
 .wt-calendar {

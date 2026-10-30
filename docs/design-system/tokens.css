@@ -308,6 +308,9 @@
   --startup-padding: var(--space-md);
   --startup-max-width: 520px;
   --startup-gap: var(--space-sm);
+  --onboarding-max-width: 760px;
+  --time-field-width: 96px;
+  --code-field-width: 120px;
 
   /* Calendar */
   --calendar-bg: var(--color-surface);

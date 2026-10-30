@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { DAYS } from "./fields";
 import { Appearance, Theme } from "./theme";
 import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
 
@@ -16,18 +17,16 @@ export type Settings = {
 };
 type Category = { id: number; code: string; name: string; color: number };
 
-const defaults = (): Settings => ({
-  workStart: "09:00",
-  workEnd: "17:00",
+/** The board defaults. */
+export const defaults = (): Settings => ({
+  workStart: "07:00",
+  workEnd: "16:00",
   lunchStart: "12:00",
-  lunchEnd: "13:00",
+  lunchEnd: "12:30",
   tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  intervalMinutes: 60,
+  intervalMinutes: 30,
   workdays: "12345",
 });
-
-/** Monday to Sunday, as the weekday digit and the label. */
-const DAYS: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 
 /** The next Monday after `today` ("YYYY-MM-DD"). On a Monday it is a week later. */
 export function nextMonday(today: string): string {
@@ -40,11 +39,25 @@ export function nextMonday(today: string): string {
 export const needsStartDate = (s: Settings, saved: Settings | null) =>
   !!saved && (expectedMinutes(s) !== expectedMinutes(saved) || s.workdays !== saved.workdays);
 
-/** "HH:MM" strings sort in time order. Returns the first problem, or "" if there is none. */
+const isTime = (t: string) => /^\d\d:\d\d$/.test(t);
+
+/** The problem with the work times and with the lunch times, each "" if there is none. "HH:MM" strings sort in time order. */
+export function timeProblems(s: Settings) {
+  const work = !isTime(s.workStart) || !isTime(s.workEnd) ? "Enter the work times as HH:MM." : s.workEnd <= s.workStart ? "Work must end after it starts." : "";
+  const lunch = !isTime(s.lunchStart) || !isTime(s.lunchEnd)
+    ? "Enter the lunch times as HH:MM."
+    : s.lunchEnd <= s.lunchStart
+      ? "Lunch must end after it starts."
+      : s.lunchStart < s.workStart || s.lunchEnd > s.workEnd
+        ? "Lunch must be inside work hours."
+        : "";
+  return { work, lunch };
+}
+
+/** Returns the first problem, or "" if there is none. */
 export function validate(s: Settings, start = "", today = ""): string {
-  if (s.workEnd <= s.workStart) return "Work must end after it starts.";
-  if (s.lunchEnd <= s.lunchStart) return "Lunch must end after it starts.";
-  if (s.lunchStart < s.workStart || s.lunchEnd > s.workEnd) return "Lunch must be inside work hours.";
+  const t = timeProblems(s);
+  if (t.work || t.lunch) return t.work || t.lunch;
   if (!Number.isInteger(s.intervalMinutes) || s.intervalMinutes < 1) return "The interval must be a whole number of minutes, at least 1.";
   if (!s.workdays) return "Choose at least one Workday.";
   if (start < today) return "The start date cannot be in the past.";

@@ -4,6 +4,7 @@ import { createContext, KeyboardEvent, useContext, useEffect, useId, useRef, use
 import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
 import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
+import { Hoot } from "./Hoot";
 import type { Settings } from "./Settings";
 import type { Appearance } from "./theme";
 
@@ -323,16 +324,12 @@ export function ErrorLine({ error, retry }: { error: string; retry?: () => void 
   );
 }
 
-/** A line from the mascot. The mascot is a placeholder: a 10 x 9 pixel grid. */
-const SPRITE = ["..xxxxxx..", ".xxxxxxxx.", "xxxxxxxxxx", "xxexxxxexx", "xxxxxxxxxx", "xxxmmmmxxx", ".xxxxxxxx.", ".xxxxxxxx.", ".xx.xx.xx."];
-const PIXEL = { x: "var(--color-mascot-body)", e: "var(--color-mascot-eye)", m: "var(--color-mascot-beak)" } as Record<string, string>;
+/** A line from the mascot. */
 function Say({ text }: { text: string }) {
   const showMascot = useContext(ShowMascot);
   return (
     <div className="wt-bot">
-      {showMascot && <svg aria-hidden="true" width="30" height="27" viewBox="0 0 10 9" shapeRendering="crispEdges" style={{ flex: "none" }}>
-        {SPRITE.flatMap((row, y) => [...row].map((c, x) => c !== "." && <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={PIXEL[c]} />))}
-      </svg>}
+      {showMascot && <Hoot px={3} />}
       <div className="wt-bubble">{text}</div>
     </div>
   );

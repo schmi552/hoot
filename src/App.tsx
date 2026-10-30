@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { Calendar } from "./Calendar";
+import { Onboarding } from "./Onboarding";
 import { Settings, SettingsForm } from "./Settings";
 import { Failure, StartupScreen } from "./StartupScreen";
 
@@ -14,7 +15,7 @@ export function App() {
   return <Tracker />;
 }
 
-/** Shows the setup form until settings exist. Then the app, with Settings one click away. */
+/** Shows Onboarding until settings exist. Then the app, with Settings one click away. */
 function Tracker() {
   const [settings, setSettings] = useState<Settings | null | undefined>(undefined);
   const [editing, setEditing] = useState(false);
@@ -22,7 +23,8 @@ function Tracker() {
   useEffect(() => void load(), []);
 
   if (settings === undefined) return null;
-  if (settings === null || editing)
+  if (settings === null) return <Onboarding onDone={load} />;
+  if (editing)
     return (
       <SettingsForm
         saved={settings}

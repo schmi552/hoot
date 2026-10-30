@@ -26,7 +26,7 @@ A component reads only semantic and component tokens. A literal that the boards 
 
 ## Rules
 
-- Pixel face (`--font-display`) only for the app name, the first mascot line of a screen and empty states.
+- Pixel face (`--font-display`) only for the app name, the first mascot line of a screen, empty states and the step numbers of Onboarding (the board shows them in pixel face).
 - Disabled controls: 45 % opacity, `not-allowed` cursor, no hover change.
 - Focus ring: 2 px, offset 2 px. Inputs: offset 0 and a focus-colored border.
 - `prefers-reduced-motion`: all motion off.
