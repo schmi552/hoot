@@ -8,7 +8,7 @@ Spec stories: 49 to 57.
 
 **Status:** done
 
-- [ ] The card matches the onboarding board in light and dark.
-- [ ] Vitest tests cover the form checks: duplicate code, the ignored empty row, an empty name.
-- [ ] "Start tracking" is disabled for an invalid form and saves a valid form with the chosen Workdays.
-- [ ] The saved Categories get code, name and color by the color rule.
+- [x] The card matches the onboarding board in light and dark.
+- [x] Vitest tests cover the form checks: duplicate code, the ignored empty row, an empty name.
+- [x] "Start tracking" is disabled for an invalid form and saves a valid form with the chosen Workdays.
+- [x] The saved Categories get code, name and color by the color rule.
