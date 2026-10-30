@@ -58,9 +58,10 @@ fn build(export: &Export) -> Result<Workbook, String> {
         sheet.write_string(i, 6, location_of.get(r.date.as_str()).copied().unwrap_or("")).map_err(|e| e.to_string())?;
     }
 
-    let categories: Vec<&str> = export.rows.iter().filter(|r| !r.absence).map(|r| r.category.as_str()).collect::<BTreeSet<_>>().into_iter().collect();
+    let worked = || export.rows.iter().filter(|r| !r.absence);
+    let categories: Vec<&str> = worked().map(|r| r.category.as_str()).collect::<BTreeSet<_>>().into_iter().collect();
     let mut per_day: BTreeMap<&str, BTreeMap<&str, u32>> = BTreeMap::new();
-    for r in export.rows.iter().filter(|r| !r.absence) {
+    for r in worked() {
         *per_day.entry(&r.date).or_default().entry(&r.category).or_default() += r.minutes;
     }
     for d in &export.days {
@@ -146,16 +147,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("report.xlsx");
         let mut export = sample();
-        export.rows.push(row("2026-10-28", 480, "Absence", "Vacation"));
-        export.rows.last_mut().unwrap().absence = true;
+        export.rows.push(Row { absence: true, ..row("2026-10-28", 480, "Absence", "Vacation") });
+        export.rows.push(Row { absence: true, start: "".into(), end: "".into(), ..row("2026-10-29", 2880, "Absence", "Leave") }); // full-day
         export.rows.push(row("2026-10-28", 60, "A", "Weekly sync")); // a Meeting counts like an Entry
         write(&path, &export).unwrap();
         let mut book: Xlsx<_> = open_workbook(&path).unwrap();
         let entries = text(&book.worksheet_range("Entries").unwrap());
-        assert_eq!(entries.len(), 6);
+        assert_eq!(entries.len(), 7);
         assert_eq!(entries[4], ["2026-10-28", "09:00", "10:00", "8", "Absence", "Vacation", "Home"]);
+        assert_eq!(entries[5], ["2026-10-29", "", "", "48", "Absence", "Leave", ""]);
         let days = text(&book.worksheet_range("Hours per day").unwrap());
         assert_eq!(days[0], ["Date", "Location", "A", "B"]);
+        assert_eq!(days.len(), 4, "an Absence adds no day and no Category column");
         assert_eq!(days[3], ["2026-10-28", "Home", "1", "0"]);
     }
 

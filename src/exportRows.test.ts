@@ -7,9 +7,17 @@ test("an Entry becomes a row in its own zone", () => {
   expect(rows).toEqual([{ date: "2026-10-26", start: "08:30", end: "10:00", minutes: 90, category: "A", description: "x", absence: false }]);
 });
 
+test("rows are in time order and a Meeting keeps its own zone", () => {
+  const start = Date.UTC(2026, 9, 26, 8, 0) / 1000;
+  const entry = { startUtc: start + 7200, endUtc: start + 9000, categoryId: 1, description: "late", tz: "Europe/Berlin" };
+  const meeting = { seriesId: 1, categoryId: 1, title: "Sync", tz: "America/New_York", startUtc: start, endUtc: start + 1800, originalStartLocal: "2026-10-26T04:00" };
+  const rows = exportRows([entry], [meeting], [], "Europe/Berlin", () => "A");
+  expect(rows.map((r) => [r.description, r.start])).toEqual([["Sync", "04:00"], ["late", "11:00"]]);
+});
+
 test("Meetings and Absences become rows next to the Entries", () => {
   const start = Date.UTC(2026, 9, 26, 8, 0) / 1000; // 09:00 in Berlin
-  const meeting = { seriesId: 1, categoryId: 2, title: "Sync", startUtc: start, endUtc: start + 1800, originalStartLocal: "2026-10-26T09:00" };
+  const meeting = { seriesId: 1, categoryId: 2, title: "Sync", tz: "Europe/Berlin", startUtc: start, endUtc: start + 1800, originalStartLocal: "2026-10-26T09:00" };
   const part = { id: 1, label: "Doctor", startDate: null, endDate: null, startUtc: start, endUtc: start + 3600, tz: "Europe/Berlin" };
   const full = { id: 2, label: "Vacation", startDate: "2026-10-27", endDate: "2026-10-28", startUtc: null, endUtc: null, tz: null };
   const rows = exportRows([], [meeting], [part, full], "Europe/Berlin", (id) => `C${id}`);

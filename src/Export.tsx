@@ -39,9 +39,10 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
         invoke<Absence[]>("list_absences"),
       ]);
       const meetings = expandMeetings(series, exceptions, fromUtc, toUtc);
-      const inRange = absenceSpans(absences, settings.tz).map((s) => s.startUtc < toUtc && s.endUtc > fromUtc);
+      const spans = absenceSpans(absences, settings.tz);
+      const inRange = absences.filter((_, i) => spans[i].startUtc < toUtc && spans[i].endUtc > fromUtc);
       const name = (id: number) => categories.find((c) => c.id === id)?.name ?? "Archived";
-      await invoke("export_xlsx", { path: target, export: { rows: exportRows(entries, meetings, absences.filter((_, i) => inRange[i]), settings.tz, name), days: exportDays(locations) } });
+      await invoke("export_xlsx", { path: target, export: { rows: exportRows(entries, meetings, inRange, settings.tz, name), days: exportDays(locations) } });
       setMessage(`Saved ${target}`);
     } catch (e) {
       setMessage(String(e));

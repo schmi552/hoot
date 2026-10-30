@@ -9,7 +9,7 @@ export type MeetingException = {
   seriesId: number; originalStartLocal: string; kind: "skip" | "override";
   startLocal: string | null; durationMinutes: number | null; title: string | null; categoryId: number | null;
 };
-export type MeetingOccurrence = Span & { seriesId: number; categoryId: number; title: string; originalStartLocal: string };
+export type MeetingOccurrence = Span & { seriesId: number; categoryId: number; title: string; tz: string; originalStartLocal: string };
 
 export type Repeat = "none" | "daily" | "weekdays" | "weekly" | "monthly";
 export const REPEATS: Repeat[] = ["none", "daily", "weekdays", "weekly", "monthly"];
@@ -40,7 +40,7 @@ export function expandMeetings(all: MeetingSeries[], exceptions: MeetingExceptio
       if (x?.kind === "skip") continue;
       const startUtc = x?.startLocal ? Temporal.ZonedDateTime.from(`${x.startLocal}:00[${s.tz}]`).epochMilliseconds / 1000 : z.epochMilliseconds / 1000;
       const endUtc = startUtc + (x?.durationMinutes ?? s.durationMinutes) * 60;
-      if (startUtc < toUtc && endUtc > fromUtc) out.push({ seriesId: s.id, categoryId: x?.categoryId ?? s.categoryId, title: x?.title ?? s.title, startUtc, endUtc, originalStartLocal: original });
+      if (startUtc < toUtc && endUtc > fromUtc) out.push({ seriesId: s.id, categoryId: x?.categoryId ?? s.categoryId, title: x?.title ?? s.title, tz: s.tz, startUtc, endUtc, originalStartLocal: original });
     }
   }
   return out.sort((a, b) => a.startUtc - b.startUtc);
