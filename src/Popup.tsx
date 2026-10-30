@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import { popupDue, recentEntries, Span } from "./schedule/schedule";
+import { dateKey, popupDue, recentEntries, Span, ymdIn } from "./schedule/schedule";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
 type Category = { id: number; name: string };
-type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[] };
+type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[]; today: string; askLocation: boolean };
 type Line = { me: boolean; text: string };
 
 const SNOOZE_MINUTES = 5;
@@ -40,7 +40,9 @@ export function Popup() {
       if (!spans || asking.current) return;
       const categories = await invoke<Category[]>("list_categories");
       const last = entries.filter((e) => e.endUtc === spans[0].startUtc)[0] ?? null; // only an Entry that touches the span can be extended
-      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories });
+      const today = dateKey(ymdIn(settings.tz, nowUtc));
+      const askLocation = !(await invoke<unknown[]>("list_workday_locations", { from: today, to: today })).length; // the first popup of the day
+      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation });
     });
     const closed = listen("popup-closed", () => asking.current && finish(Date.now() / 1000)); // closed with the window button
     return () => void [unlisten, closed].forEach((u) => u.then((f) => f()));
@@ -51,7 +53,10 @@ export function Popup() {
 }
 
 function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void }) {
-  const { now, settings, spans, last, recents, categories } = ask;
+  const { now, settings, spans, last, recents, categories, today } = ask;
+  const asked = useRef(ask.askLocation); // the popup began with the location question, so the thread keeps its answer
+  const [askLocation, setAskLocation] = useState(ask.askLocation);
+  const [place, setPlace] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState(recents[0]?.categoryId ?? categories[0]?.id ?? 0);
@@ -64,7 +69,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
   const category = categories.find((c) => c.id === categoryId);
 
   const question = last ? `Still on "${last.description}"?` : `What did you do since ${time(spans[0].startUtc)}?`;
-  useEffect(() => void (thread.current!.scrollTop = thread.current!.scrollHeight), [lines, saved]);
+  useEffect(() => void (thread.current!.scrollTop = thread.current!.scrollHeight), [lines, saved, place]);
 
   const save = async (still: boolean) => {
     const source = still ? last! : { description: description.trim(), categoryId };
@@ -89,10 +94,26 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
     setTimeout(() => onDone(now), 1200);
   };
 
+  const setLocation = async (location: "home" | "office") => {
+    try {
+      await invoke("set_workday_location", { date: today, location });
+    } catch (e) {
+      return setError(String(e));
+    }
+    emit("entries-changed");
+    setError("");
+    setPlace(location === "home" ? "Home" : "Office");
+    setAskLocation(false);
+  };
+
   const snooze = () => onDone(now + SNOOZE_MINUTES * 60 - settings.intervalMinutes * 60);
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") onDone(now);
-    else if (e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") (e.ctrlKey || e.metaKey) ? last && save(true) : save(false);
+    else if (askLocation) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.toLowerCase() === "h") setLocation("home");
+      else if (e.key.toLowerCase() === "o") setLocation("office");
+    } else if (e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") (e.ctrlKey || e.metaKey) ? last && save(true) : save(false);
   };
 
   return (
@@ -102,11 +123,20 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
         <span className="wt-sub">{time(now)} · Esc skip</span>
       </div>
       <div className="wt-thread" ref={thread} role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
-        <Say text={question} />
+        {asked.current && <Say text="Are you working from home or in the office today?" />}
+        {asked.current && place && <div className="wt-me">{place}</div>}
+        {!askLocation && <Say text={question} />}
         {lines.map((l, i) => (l.me ? <div key={i} className="wt-me">{l.text}</div> : <Say key={i} text={l.text} />))}
         {saved && <Say text="Saved. See you next time!" />}
       </div>
-      {!saved && (
+      {askLocation ? (
+        <div className="wt-quick" role="group" aria-label="Workday location">
+          <button type="button" autoFocus className="wt-chip is-primary" onClick={() => setLocation("home")}>Home (H)</button>
+          <button type="button" className="wt-chip is-primary" onClick={() => setLocation("office")}>Office (O)</button>
+          <button type="button" className="wt-chip" onClick={snooze}>Snooze {SNOOZE_MINUTES} min</button>
+          <div className="wt-error" role="alert">{error}</div>
+        </div>
+      ) : !saved && (
         <>
           <div className="wt-quick" role="group" aria-label="Quick replies">
             {last && <button type="button" className="wt-chip is-primary" onClick={() => save(true)}>Yes, still ({STILL_KEY})</button>}

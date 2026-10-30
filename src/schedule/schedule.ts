@@ -18,6 +18,9 @@ export function expectedMinutes(s: { workStart: string; workEnd: string; lunchSt
 /** A calendar day in a zone, as the numbers a person reads: month is 1 to 12. */
 export type Ymd = { y: number; m: number; d: number };
 
+/** A day as "YYYY-MM-DD", the key of a Workday location. */
+export const dateKey = ({ y, m, d }: Ymd) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
 /** Year, month and day of an instant (epoch seconds) in the IANA zone `tz`. */
 export function ymdIn(tz: string, instantSec: number): Ymd {
   const p = Object.fromEntries(

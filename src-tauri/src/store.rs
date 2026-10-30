@@ -11,7 +11,7 @@ pub struct Category {
 }
 
 /// The schema version that the newest migration creates.
-pub const LATEST_VERSION: i64 = 2;
+pub const LATEST_VERSION: i64 = 3;
 
 /// Times are "HH:MM" in the zone `tz`. `effective_from` is not part of it: a save always starts today.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -54,6 +54,13 @@ pub fn migrations() -> Migrations<'static> {
                 interval_minutes INTEGER NOT NULL
             );
             CREATE TABLE app_setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+        ),
+        // No row for a date means the first popup of that day has not asked yet.
+        M::up(
+            "CREATE TABLE workday_location (
+                date TEXT PRIMARY KEY,
+                location TEXT NOT NULL CHECK (location IN ('home', 'office'))
+            );",
         ),
     ])
 }
@@ -213,6 +220,24 @@ pub fn list_categories(conn: &Connection) -> Result<Vec<Category>> {
         .collect()
 }
 
+#[derive(Serialize, Debug, PartialEq)]
+pub struct WorkdayLocation {
+    pub date: String,
+    pub location: String,
+}
+
+/// Set the Workday location of `date` ("YYYY-MM-DD"). A second answer replaces the first.
+pub fn set_workday_location(conn: &Connection, date: &str, location: &str) -> Result<()> {
+    conn.execute("INSERT OR REPLACE INTO workday_location (date, location) VALUES (?1, ?2)", [date, location]).map(drop)
+}
+
+/// The answered Workday locations from `from` to `to`, both dates included.
+pub fn list_workday_locations(conn: &Connection, from: &str, to: &str) -> Result<Vec<WorkdayLocation>> {
+    conn.prepare("SELECT date, location FROM workday_location WHERE date BETWEEN ?1 AND ?2 ORDER BY date")?
+        .query_map([from, to], |r| Ok(WorkdayLocation { date: r.get(0)?, location: r.get(1)? }))?
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,5 +346,21 @@ mod tests {
         // Delete, then undo: the Entry comes back with its id.
         delete_entry(&conn, moved.id).unwrap();
         assert_eq!(create_entry(&conn, &moved).unwrap().id, moved.id);
+    }
+
+    #[test]
+    fn a_workday_location_is_read_back_and_a_new_answer_replaces_the_old_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let loc = |date: &str, location: &str| WorkdayLocation { date: date.into(), location: location.into() };
+
+        set_workday_location(&conn, "2026-10-29", "home").unwrap();
+        set_workday_location(&conn, "2026-10-30", "home").unwrap();
+        set_workday_location(&conn, "2026-10-30", "office").unwrap();
+
+        assert_eq!(list_workday_locations(&conn, "2026-10-30", "2026-10-30").unwrap(), vec![loc("2026-10-30", "office")]);
+        assert_eq!(list_workday_locations(&conn, "2026-10-01", "2026-10-31").unwrap().len(), 2);
+        assert_eq!(list_workday_locations(&conn, "2026-11-01", "2026-11-30").unwrap(), vec![]);
+        assert!(set_workday_location(&conn, "2026-10-31", "moon").is_err());
     }
 }

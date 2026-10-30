@@ -10,7 +10,7 @@ import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
 import {
-  dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
+  dateKey, dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
 } from "./schedule/schedule";
 import type { Settings } from "./Settings";
 
@@ -31,6 +31,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [range, setRange] = useState<[number, number] | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [locations, setLocations] = useState<Record<string, string>>({}); // date -> "home" | "office"
   const [slot, setSlot] = useState<Slot | null>(null);
   const [picked, setPicked] = useState<Date | null>(null); // a clicked slot, shaded until `N` or a drag uses it
   const [categoryId, setCategoryId] = useState(0);
@@ -54,6 +55,13 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     const unlisten = listen("entries-changed", load); // the popup saved an Entry
     return () => void unlisten.then((f) => f());
   }, []);
+  useEffect(() => {
+    if (!range) return;
+    let stale = false;
+    const [from, to] = [dateKey(ymdIn(settings.tz, range[0])), dateKey(ymdIn(settings.tz, range[1] - 1))];
+    invoke<{ date: string; location: string }[]>("list_workday_locations", { from, to }).then((l) => stale || setLocations(Object.fromEntries(l.map((x) => [x.date, x.location]))));
+    return () => void (stale = true);
+  }, [range, reload]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);
@@ -184,6 +192,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const dayOf = (d: Date) => ymdIn(settings.tz, secs(d));
   const expected = (d: Date) => ([0, 6].includes(weekday(dayOf(d))) ? 0 : expectedMinutes(settings));
   const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
+  const where = (d: Date) => ({ home: "Home", office: "Office" })[locations[dateKey(dayOf(d))]] ?? "";
+  const daySub = (d: Date) => `${formatHM(logged(d))} / ${formatHM(expected(d))}${where(d) && ` · ${where(d)}`}`;
   const name = (id: number) => categories.find((c) => c.id === id)?.name ?? "";
 
   return (
@@ -272,13 +282,13 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         dayHeaderContent={(i) => (
           <>
             <div>{i.text}</div>
-            <div className="wt-sub">{formatHM(logged(i.date))} / {formatHM(expected(i.date))}</div>
+            <div className="wt-sub">{daySub(i.date)}</div>
           </>
         )}
         dayCellTopContent={(i) => (
           <>
             <div>{i.text}</div>
-            <div className="wt-sub">{formatHM(logged(i.date))} / {formatHM(expected(i.date))}</div>
+            <div className="wt-sub">{daySub(i.date)}</div>
           </>
         )}
         dayCellClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}

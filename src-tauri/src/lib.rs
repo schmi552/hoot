@@ -57,6 +57,16 @@ fn list_entries(db: State<Db>, from_utc: i64, to_utc: i64) -> Result<Vec<store::
     store::list_entries(&db.0.lock().unwrap(), from_utc, to_utc).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn set_workday_location(db: State<Db>, date: String, location: String) -> Result<(), String> {
+    store::set_workday_location(&db.0.lock().unwrap(), &date, &location).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_workday_locations(db: State<Db>, from: String, to: String) -> Result<Vec<store::WorkdayLocation>, String> {
+    store::list_workday_locations(&db.0.lock().unwrap(), &from, &to).map_err(|e| e.to_string())
+}
+
 fn recovered(app: &AppHandle, conn: rusqlite::Connection) {
     app.manage(Db(Mutex::new(conn)));
     *app.state::<StartupFailure>().0.lock().unwrap() = None;
@@ -194,6 +204,8 @@ pub fn run() {
             update_entry,
             delete_entry,
             list_entries,
+            set_workday_location,
+            list_workday_locations,
             startup_failure,
             start_empty,
             restore_latest_backup,
