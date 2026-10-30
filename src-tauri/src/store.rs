@@ -282,6 +282,65 @@ pub fn list_meetings(conn: &Connection) -> Result<Vec<MeetingSeries>> {
         .collect()
 }
 
+/// Change every occurrence: replace the fields of the series `m.id` that the dialog edits.
+/// A new start time drops the exceptions, because they are keyed by the old start times.
+pub fn update_meeting(conn: &Connection, m: &MeetingSeries) -> Result<()> {
+    conn.execute(
+        "DELETE FROM meeting_exception WHERE series_id = ?1 AND (SELECT start_local FROM meeting_series WHERE id = ?1) != ?2",
+        (m.id, &m.start_local),
+    )?;
+    conn.execute(
+        "UPDATE meeting_series SET category_id = ?2, title = ?3, start_local = ?4, duration_minutes = ?5 WHERE id = ?1",
+        (m.id, m.category_id, &m.title, &m.start_local, m.duration_minutes),
+    )?;
+    Ok(())
+}
+
+/// Delete a series with its exceptions.
+pub fn delete_meeting(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM meeting_exception WHERE series_id = ?1", [id])?;
+    conn.execute("DELETE FROM meeting_series WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingException {
+    pub series_id: i64,
+    pub original_start_local: String,
+    pub kind: String,
+    pub start_local: Option<String>,
+    pub duration_minutes: Option<i64>,
+    pub title: Option<String>,
+    pub category_id: Option<i64>,
+}
+
+/// Skip or override one occurrence. A second change of the same occurrence replaces the first.
+pub fn set_meeting_exception(conn: &Connection, x: &MeetingException) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO meeting_exception (series_id, original_start_local, kind, start_local, duration_minutes, title, category_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (x.series_id, &x.original_start_local, &x.kind, &x.start_local, x.duration_minutes, &x.title, x.category_id),
+    )?;
+    Ok(())
+}
+
+pub fn list_meeting_exceptions(conn: &Connection) -> Result<Vec<MeetingException>> {
+    conn.prepare("SELECT series_id, original_start_local, kind, start_local, duration_minutes, title, category_id FROM meeting_exception")?
+        .query_map([], |r| {
+            Ok(MeetingException {
+                series_id: r.get(0)?,
+                original_start_local: r.get(1)?,
+                kind: r.get(2)?,
+                start_local: r.get(3)?,
+                duration_minutes: r.get(4)?,
+                title: r.get(5)?,
+                category_id: r.get(6)?,
+            })
+        })?
+        .collect()
+}
+
 #[derive(Serialize, Debug, PartialEq)]
 pub struct WorkdayLocation {
     pub date: String,
@@ -461,5 +520,33 @@ mod tests {
 
         assert_eq!(list_meetings(&conn).unwrap(), vec![saved]);
         assert!(create_meeting(&conn, &MeetingSeries { duration_minutes: 0, ..m }).is_err());
+    }
+
+    #[test]
+    fn an_exception_is_replaced_by_a_later_one_and_goes_with_its_series() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let c = add_category(&conn, "A").unwrap();
+        let m = create_meeting(
+            &conn,
+            &MeetingSeries { id: 0, category_id: c.id, title: "Standup".into(), start_local: "2026-03-23T10:00".into(), duration_minutes: 30, tz: "Europe/Berlin".into(), rrule: Some("FREQ=DAILY".into()) },
+        )
+        .unwrap();
+        let x = MeetingException { series_id: m.id, original_start_local: "2026-03-24T10:00".into(), kind: "skip".into(), start_local: None, duration_minutes: None, title: None, category_id: None };
+
+        set_meeting_exception(&conn, &x).unwrap();
+        let moved = MeetingException { kind: "override".into(), start_local: Some("2026-03-24T14:00".into()), ..x.clone() };
+        set_meeting_exception(&conn, &moved).unwrap();
+        assert_eq!(list_meeting_exceptions(&conn).unwrap(), vec![moved]);
+        assert!(set_meeting_exception(&conn, &MeetingException { kind: "other".into(), ..x }).is_err());
+
+        update_meeting(&conn, &MeetingSeries { title: "Daily".into(), ..m.clone() }).unwrap();
+        assert_eq!(list_meetings(&conn).unwrap()[0].title, "Daily");
+        assert_eq!(list_meeting_exceptions(&conn).unwrap().len(), 1); // same start, so the exception stays
+        update_meeting(&conn, &MeetingSeries { start_local: "2026-03-23T11:00".into(), ..m.clone() }).unwrap();
+        assert!(list_meeting_exceptions(&conn).unwrap().is_empty());
+        delete_meeting(&conn, m.id).unwrap();
+        assert!(list_meetings(&conn).unwrap().is_empty());
+        assert!(list_meeting_exceptions(&conn).unwrap().is_empty());
     }
 }

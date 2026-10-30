@@ -69,6 +69,26 @@ fn list_meetings(db: State<Db>) -> Result<Vec<store::MeetingSeries>, String> {
 }
 
 #[tauri::command]
+fn update_meeting(db: State<Db>, meeting: store::MeetingSeries) -> Result<(), String> {
+    store::update_meeting(&db.0.lock().unwrap(), &meeting).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_meeting(db: State<Db>, id: i64) -> Result<(), String> {
+    store::delete_meeting(&db.0.lock().unwrap(), id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_meeting_exception(db: State<Db>, exception: store::MeetingException) -> Result<(), String> {
+    store::set_meeting_exception(&db.0.lock().unwrap(), &exception).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_meeting_exceptions(db: State<Db>) -> Result<Vec<store::MeetingException>, String> {
+    store::list_meeting_exceptions(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_workday_location(db: State<Db>, date: String, location: String) -> Result<(), String> {
     store::set_workday_location(&db.0.lock().unwrap(), &date, &location).map_err(|e| e.to_string())
 }
@@ -240,6 +260,10 @@ pub fn run() {
             list_entries,
             create_meeting,
             list_meetings,
+            update_meeting,
+            delete_meeting,
+            set_meeting_exception,
+            list_meeting_exceptions,
             set_workday_location,
             list_workday_locations,
             export_xlsx,

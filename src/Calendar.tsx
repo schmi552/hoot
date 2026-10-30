@@ -9,10 +9,11 @@ import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
+import { Temporal } from "temporal-polyfill";
 import {
   dateKey, dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
 } from "./schedule/schedule";
-import { expandMeetings, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor } from "./schedule/meetings";
+import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
@@ -32,7 +33,9 @@ const localInput = (tz: string, sec: number) => {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(sec * 1000).map((x) => [x.type, x.value]));
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 };
-type MeetingForm = { title: string; categoryId: number; start: string; duration: number; repeat: Repeat };
+type MeetingForm = { title: string; categoryId: number; start: string; duration: number; repeat: Repeat; editing?: MeetingOccurrence };
+/** What the scope dialog is asking about: the changed form of a Meeting, or a delete. */
+type Scope = { occurrence: MeetingOccurrence; form?: MeetingForm };
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
 export function Calendar({ settings, onSettings }: { settings: Settings; onSettings: () => void }) {
@@ -52,6 +55,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [notice, setNotice] = useState("");
   const [series, setSeries] = useState<MeetingSeries[]>([]);
   const [meetingForm, setMeetingForm] = useState<MeetingForm | null>(null);
+  const [exceptions, setExceptions] = useState<MeetingException[]>([]);
+  const [scope, setScope] = useState<Scope | null>(null);
   const [menu, setMenu] = useState(false);
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
@@ -79,7 +84,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   }, [range, reload]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
   useEffect(() => void invoke<MeetingSeries[]>("list_meetings").then(setSeries), [reload]);
-  const meetings = range ? expandMeetings(series, range[0], range[1]) : [];
+  useEffect(() => void invoke<MeetingException[]>("list_meeting_exceptions").then(setExceptions), [reload]);
+  const meetings = range ? expandMeetings(series, exceptions, range[0], range[1]) : [];
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(t);
@@ -102,9 +108,35 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     setError(categories.length ? "" : "Add a Category in Settings first.");
     setFailed(false);
   };
+  const editMeeting = (m: MeetingOccurrence) => {
+    setMenu(false);
+    setPicked(null);
+    setMeetingForm({ title: m.title, categoryId: m.categoryId, start: localInput(settings.tz, m.startUtc), duration: (m.endUtc - m.startUtc) / 60, repeat: "none", editing: m });
+    setError("");
+    setFailed(false);
+  };
+  /** Run a Meeting write; on success close the dialogs, on failure show the error where the user can retry. */
+  const writeMeeting = (write: Promise<unknown>) =>
+    write.then(
+      () => (setMeetingForm(null), setScope(null), setPickedMeeting(null), load()),
+      (e) => (setError(String(e)), setFailed(true)),
+    );
+  /** Change or delete one occurrence ("This Meeting only") or the series ("All Meetings"). */
+  const changeMeeting = (s: Scope, only: boolean) => {
+    const { occurrence: o, form: f } = s;
+    const base = series.find((x) => x.id === o.seriesId)!;
+    if (!f) return writeMeeting(only ? invoke("set_meeting_exception", { exception: { seriesId: o.seriesId, originalStartLocal: o.originalStartLocal, kind: "skip", startLocal: null, durationMinutes: null, title: null, categoryId: null } }) : invoke("delete_meeting", { id: o.seriesId }));
+    if (only) return writeMeeting(invoke("set_meeting_exception", { exception: { seriesId: o.seriesId, originalStartLocal: o.originalStartLocal, kind: "override", startLocal: f.start, durationMinutes: f.duration, title: f.title.trim(), categoryId: f.categoryId } }));
+    // "All Meetings": the series start moves by as much as the user moved the occurrence in the form.
+    const moved = Temporal.PlainDateTime.from(base.startLocal).add(Temporal.PlainDateTime.from(localInput(settings.tz, o.startUtc)).until(Temporal.PlainDateTime.from(f.start)));
+    return writeMeeting(invoke("update_meeting", { meeting: { ...base, categoryId: f.categoryId, title: f.title.trim(), startLocal: moved.toString({ smallestUnit: "minute" }), durationMinutes: f.duration } }));
+  };
+  /** A one-off Meeting has no scope to ask about. */
+  const askScope = (s: Scope) => (series.find((x) => x.id === s.occurrence.seriesId)?.rrule ? setScope(s) : void changeMeeting(s, false));
   const saveMeeting = () => {
     const f = meetingForm!;
     if (!f.title.trim() || !f.start || f.duration < 1) return setError("Give the Meeting a title, a start and a length."), setFailed(false);
+    if (f.editing) return askScope({ occurrence: f.editing, form: f });
     invoke("create_meeting", { meeting: { id: 0, categoryId: f.categoryId, title: f.title.trim(), startLocal: f.start, durationMinutes: f.duration, tz: settings.tz, rrule: ruleFor(f.repeat) } }).then(
       () => (setMeetingForm(null), load()),
       (e) => (setError(String(e)), setFailed(true)),
@@ -173,7 +205,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
   onKey.current = (e) => {
-    if (slot || meetingForm || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    if (slot || meetingForm || scope || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
     const k = e.key.toLowerCase();
     const mod = e.metaKey || e.ctrlKey;
     const keep = () => e.preventDefault();
@@ -182,6 +214,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       clipboard.current = { id: 0, categoryId: pickedMeeting.categoryId, description: pickedMeeting.title, startUtc: pickedMeeting.startUtc, endUtc: pickedMeeting.endUtc, tz: settings.tz };
       return;
     }
+    if (pickedMeeting && !mod && (k === "delete" || k === "backspace")) return keep(), askScope({ occurrence: pickedMeeting });
+    if (pickedMeeting && k === "enter") return keep(), editMeeting(pickedMeeting);
     if (k === "n" && !mod) {
       keep();
       const start = picked ? secs(picked) : defaultStart();
@@ -251,6 +285,12 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         {menu && <button className="wt-chip" onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>}
         {menu && <button className="wt-chip" onClick={openMeeting}>Meeting (M)</button>}
       </span>
+      {pickedMeeting && (
+        <>
+          <button className="wt-chip" onClick={() => editMeeting(pickedMeeting)}>Edit Meeting</button>
+          <button className="wt-chip" onClick={() => askScope({ occurrence: pickedMeeting })}>Delete Meeting</button>
+        </>
+      )}
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
       {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
@@ -291,12 +331,23 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           </select>
           <input className="wt-input" type="datetime-local" aria-label="Start" value={meetingForm.start} onChange={(e) => setMeetingForm({ ...meetingForm, start: e.target.value })} />
           <input className="wt-input" type="number" min={1} step={5} aria-label="Duration in minutes" value={meetingForm.duration} onChange={(e) => setMeetingForm({ ...meetingForm, duration: Number(e.target.value) })} />
-          <select className="wt-input" aria-label="Repeat" value={meetingForm.repeat} onChange={(e) => setMeetingForm({ ...meetingForm, repeat: e.target.value as Repeat })}>
-            {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
-          </select>
+          {!meetingForm.editing && (
+            <select className="wt-input" aria-label="Repeat" value={meetingForm.repeat} onChange={(e) => setMeetingForm({ ...meetingForm, repeat: e.target.value as Repeat })}>
+              {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
+            </select>
+          )}
           <button className="wt-chip is-primary" type="submit" disabled={!meetingForm.categoryId}>Save</button>
           <button className="wt-chip" type="button" onClick={() => setMeetingForm(null)}>Cancel</button>
           <ErrorLine error={error} retry={failed ? saveMeeting : undefined} />
+        </form>
+      )}
+      {scope && (
+        <form className="wt-form wt-editor" role="alertdialog" aria-label="Which Meetings" onKeyDown={(e) => e.key === "Escape" && setScope(null)} onSubmit={(e) => e.preventDefault()}>
+          <span className="wt-sub">{scope.form ? "Change" : "Delete"}:</span>
+          <button className="wt-chip is-primary" type="button" autoFocus onClick={() => changeMeeting(scope, true)}>This Meeting only</button>
+          <button className="wt-chip" type="button" onClick={() => changeMeeting(scope, false)}>All Meetings</button>
+          <button className="wt-chip" type="button" onClick={() => setScope(null)}>Cancel</button>
+          <ErrorLine error={error} />
         </form>
       )}
       <FullCalendar

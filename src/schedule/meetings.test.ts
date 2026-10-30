@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { expandMeetings, ruleFor, type MeetingSeries } from "./meetings";
+import { expandMeetings, ruleFor, type MeetingException, type MeetingSeries } from "./meetings";
 import { instantAt } from "./schedule";
 import { gapDue, popupDue, subtractSpans } from "./schedule";
 
@@ -9,36 +9,68 @@ const series = (over: Partial<MeetingSeries> = {}): MeetingSeries => ({
 const at = (day: number, hm: number, month = 3) => instantAt("Europe/Berlin", { y: 2026, m: month, d: day }, hm);
 
 test("a one-off Meeting shows only in a range that touches it", () => {
-  const [m] = expandMeetings([series()], at(23, 0), at(24, 0));
+  const [m] = expandMeetings([series()], [], at(23, 0), at(24, 0));
   expect([m.startUtc, m.endUtc, m.title]).toEqual([at(23, 600), at(23, 630), "Standup"]);
-  expect(expandMeetings([series()], at(24, 0), at(25, 0))).toEqual([]);
+  expect(expandMeetings([series()], [], at(24, 0), at(25, 0))).toEqual([]);
 });
 
 test("the repeat choices expand to the right days", () => {
   const week = [at(23, 0), at(30, 0)] as const; // Mon 23 to Mon 30 March
   const days = (repeat: Parameters<typeof ruleFor>[0]) =>
-    expandMeetings([series({ rrule: ruleFor(repeat) })], ...week).map((o) => new Date(o.startUtc * 1000).getUTCDate());
+    expandMeetings([series({ rrule: ruleFor(repeat) })], [], ...week).map((o) => new Date(o.startUtc * 1000).getUTCDate());
   expect(days("daily")).toHaveLength(7);
   expect(days("weekdays")).toHaveLength(5);
   expect(days("weekly")).toHaveLength(1);
-  expect(expandMeetings([series({ rrule: ruleFor("monthly") })], at(1, 0, 4), at(30, 0, 4))).toHaveLength(1); // 23 April
+  expect(expandMeetings([series({ rrule: ruleFor("monthly") })], [], at(1, 0, 4), at(30, 0, 4))).toHaveLength(1); // 23 April
 });
 
 test("a Meeting stays at 10:00 local across the DST change", () => {
   // Europe/Berlin changes to summer time on Sunday 29 March 2026.
-  const occ = expandMeetings([series({ rrule: ruleFor("daily") })], at(27, 0), at(31, 0));
+  const occ = expandMeetings([series({ rrule: ruleFor("daily") })], [], at(27, 0), at(31, 0));
   expect(occ.map((o) => o.startUtc)).toEqual([at(27, 600), at(28, 600), at(29, 600), at(30, 600)]);
   expect(occ[2].startUtc - occ[1].startUtc).toBe(23 * 3600);
 });
 
 test("a Meeting that began before the range and runs into it is found", () => {
-  expect(expandMeetings([series({ durationMinutes: 120 })], at(23, 660), at(24, 0))).toHaveLength(1); // range starts 11:00, Meeting 10:00-12:00
+  expect(expandMeetings([series({ durationMinutes: 120 })], [], at(23, 660), at(24, 0))).toHaveLength(1); // range starts 11:00, Meeting 10:00-12:00
 });
 
 test("a weekly Meeting stays at 10:00 local across the autumn DST change", () => {
   // Europe/Berlin changes back on Sunday 25 October 2026.
-  const occ = expandMeetings([series({ startLocal: "2026-10-19T10:00", rrule: ruleFor("weekly") })], at(19, 0, 10), at(27, 0, 10));
+  const occ = expandMeetings([series({ startLocal: "2026-10-19T10:00", rrule: ruleFor("weekly") })], [], at(19, 0, 10), at(27, 0, 10));
   expect(occ.map((o) => o.startUtc)).toEqual([at(19, 600, 10), at(26, 600, 10)]);
+});
+
+const exception = (over: Partial<MeetingException>): MeetingException => ({
+  seriesId: 1, originalStartLocal: "2026-03-24T10:00", kind: "skip", startLocal: null, durationMinutes: null, title: null, categoryId: null, ...over,
+});
+const daily = series({ rrule: ruleFor("daily") });
+const week = [at(23, 0), at(27, 0)] as const; // Mon 23 to Fri 27 March
+
+test("a skip removes one occurrence and keeps the others", () => {
+  const occ = expandMeetings([daily], [exception({})], ...week);
+  expect(occ.map((o) => o.startUtc)).toEqual([at(23, 600), at(25, 600), at(26, 600)]);
+});
+
+test("an override changes one occurrence and keeps the others", () => {
+  const x = exception({ kind: "override", startLocal: "2026-03-24T14:00", durationMinutes: 45, title: "Standup (moved)" });
+  const occ = expandMeetings([daily], [x], ...week);
+  expect(occ.map((o) => [o.startUtc, o.endUtc, o.title])).toEqual([
+    [at(23, 600), at(23, 630), "Standup"],
+    [at(24, 840), at(24, 885), "Standup (moved)"],
+    [at(25, 600), at(25, 630), "Standup"],
+    [at(26, 600), at(26, 630), "Standup"],
+  ]);
+});
+
+test("an override that moves an occurrence into another week shows there", () => {
+  const x = exception({ kind: "override", startLocal: "2026-03-31T10:00" });
+  expect(expandMeetings([daily], [x], at(30, 0), at(31, 0))).toHaveLength(1); // the 31st is not in the range
+  expect(expandMeetings([daily], [x], at(31, 0), at(32, 0)).map((o) => o.originalStartLocal)).toEqual(["2026-03-24T10:00", "2026-03-31T10:00"]);
+});
+
+test("an exception of another series is ignored", () => {
+  expect(expandMeetings([daily], [exception({ seriesId: 2 })], ...week)).toHaveLength(4);
 });
 
 test("subtractSpans cuts Meetings out of a span", () => {
