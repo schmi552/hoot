@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   dateKey, dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
 } from "./schedule/schedule";
+import { expandMeetings, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
@@ -26,6 +27,12 @@ const DEFAULT_MINUTES = 60;
 const SLOT_MINUTES = 30;
 const DAY = 86_400; // shortcut: a day step is 24 hours, so it is an hour off across a DST change; upgrade with instantAt if that matters
 const secs = (d: Date) => d.getTime() / 1000;
+/** An instant as "YYYY-MM-DDTHH:MM" on the wall clock of `tz`. */
+const localInput = (tz: string, sec: number) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(sec * 1000).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+};
+type MeetingForm = { title: string; categoryId: number; start: string; duration: number; repeat: Repeat };
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
 export function Calendar({ settings, onSettings }: { settings: Settings; onSettings: () => void }) {
@@ -43,6 +50,10 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [editing, setEditing] = useState<Entry | null>(null);
   const [selected, setSelected] = useState(0);
   const [notice, setNotice] = useState("");
+  const [series, setSeries] = useState<MeetingSeries[]>([]);
+  const [meetingForm, setMeetingForm] = useState<MeetingForm | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
   const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
   const clipboard = useRef<Entry | null>(null);
@@ -67,6 +78,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     return () => void (stale = true);
   }, [range, reload]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
+  useEffect(() => void invoke<MeetingSeries[]>("list_meetings").then(setSeries), [reload]);
+  const meetings = range ? expandMeetings(series, range[0], range[1]) : [];
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(t);
@@ -80,6 +93,22 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     setDescription(entry?.description ?? "");
     setError(categories.length ? "" : "Add a Category in Settings first.");
     setFailed(false);
+  };
+  const openMeeting = () => {
+    setMenu(false);
+    setPicked(null);
+    const start = picked ? secs(picked) : defaultStart();
+    setMeetingForm({ title: "", categoryId: categories[0]?.id ?? 0, start: localInput(settings.tz, start), duration: DEFAULT_MINUTES, repeat: "none" });
+    setError(categories.length ? "" : "Add a Category in Settings first.");
+    setFailed(false);
+  };
+  const saveMeeting = () => {
+    const f = meetingForm!;
+    if (!f.title.trim() || !f.start || f.duration < 1) return setError("Give the Meeting a title, a start and a length."), setFailed(false);
+    invoke("create_meeting", { meeting: { id: 0, categoryId: f.categoryId, title: f.title.trim(), startLocal: f.start, durationMinutes: f.duration, tz: settings.tz, rrule: ruleFor(f.repeat) } }).then(
+      () => (setMeetingForm(null), load()),
+      (e) => (setError(String(e)), setFailed(true)),
+    );
   };
   const close = () => {
     setSlot(null);
@@ -144,10 +173,15 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
   onKey.current = (e) => {
-    if (slot || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    if (slot || meetingForm || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
     const k = e.key.toLowerCase();
     const mod = e.metaKey || e.ctrlKey;
     const keep = () => e.preventDefault();
+    if (k === "m" && !mod) return keep(), openMeeting();
+    if (mod && k === "c" && pickedMeeting) {
+      clipboard.current = { id: 0, categoryId: pickedMeeting.categoryId, description: pickedMeeting.title, startUtc: pickedMeeting.startUtc, endUtc: pickedMeeting.endUtc, tz: settings.tz };
+      return;
+    }
     if (k === "n" && !mod) {
       keep();
       const start = picked ? secs(picked) : defaultStart();
@@ -212,6 +246,11 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     >
       <button className="wt-chip" onClick={onSettings}>Settings</button>
       <button className="wt-chip" onClick={() => setExporting(true)}>Export</button>
+      <span className="wt-menu">
+        <button className="wt-chip" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
+        {menu && <button className="wt-chip" onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>}
+        {menu && <button className="wt-chip" onClick={openMeeting}>Meeting (M)</button>}
+      </span>
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
       {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
@@ -237,6 +276,29 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <ErrorLine error={error} retry={failed ? save : undefined} />
         </form>
       )}
+      {meetingForm && (
+        <form
+          className="wt-form wt-editor"
+          onKeyDown={(e) => e.key === "Escape" && setMeetingForm(null)}
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveMeeting();
+          }}
+        >
+          <input className="wt-input" aria-label="Title" placeholder="Title" autoFocus value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })} />
+          <select className="wt-input" aria-label="Category" value={meetingForm.categoryId} onChange={(e) => setMeetingForm({ ...meetingForm, categoryId: Number(e.target.value) })}>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <input className="wt-input" type="datetime-local" aria-label="Start" value={meetingForm.start} onChange={(e) => setMeetingForm({ ...meetingForm, start: e.target.value })} />
+          <input className="wt-input" type="number" min={1} step={5} aria-label="Duration in minutes" value={meetingForm.duration} onChange={(e) => setMeetingForm({ ...meetingForm, duration: Number(e.target.value) })} />
+          <select className="wt-input" aria-label="Repeat" value={meetingForm.repeat} onChange={(e) => setMeetingForm({ ...meetingForm, repeat: e.target.value as Repeat })}>
+            {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
+          </select>
+          <button className="wt-chip is-primary" type="submit" disabled={!meetingForm.categoryId}>Save</button>
+          <button className="wt-chip" type="button" onClick={() => setMeetingForm(null)}>Cancel</button>
+          <ErrorLine error={error} retry={failed ? saveMeeting : undefined} />
+        </form>
+      )}
       <FullCalendar
         ref={calendar}
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, classicTheme]}
@@ -252,10 +314,14 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         scrollTime={settings.workStart + ":00"}
         selectable
         selectMirror
-        selectOverlap={false}
+        selectOverlap={(ev) => !!ev.extendedProps.meeting} // a Meeting never blocks an Entry
         editable
         views={{ dayGridMonth: { editable: false } }} // the month view only shows and navigates
-        eventClick={(i) => setSelected(Number(i.event.id))}
+        eventClick={(i) => {
+          const m = i.event.extendedProps.meeting as MeetingOccurrence | undefined;
+          setPickedMeeting(m ?? null);
+          setSelected(m ? 0 : Number(i.event.id));
+        }}
         eventDidMount={(i) => void (i.el.dataset.id = i.event.id)}
         eventDrop={(i) => {
           i.revert(); // the grid follows the saved Entries, not the drag
@@ -270,6 +336,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         dateClick={(i) => {
           if (i.view.type === "dayGridMonth") return setPicked(null), setSelected(0), i.view.calendar.changeView("timeGridWeek", i.date); // the day opens in the week view
           setPicked(i.date);
+          setPickedMeeting(null);
           setSelected(0);
         }}
         select={(i) => {
@@ -284,6 +351,15 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             start: new Date(e.startUtc * 1000),
             end: new Date(e.endUtc * 1000),
             classNames: e.id === selected ? ["wt-selected"] : [],
+          })),
+          ...meetings.map((m) => ({
+            id: `m${m.seriesId}-${m.startUtc}`,
+            title: `${name(m.categoryId)}: ${m.title}`,
+            start: new Date(m.startUtc * 1000),
+            end: new Date(m.endUtc * 1000),
+            editable: false,
+            classNames: ["wt-meeting"],
+            extendedProps: { meeting: m },
           })),
           ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}

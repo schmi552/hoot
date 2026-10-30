@@ -59,6 +59,16 @@ fn list_entries(db: State<Db>, from_utc: i64, to_utc: i64) -> Result<Vec<store::
 }
 
 #[tauri::command]
+fn create_meeting(db: State<Db>, meeting: store::MeetingSeries) -> Result<store::MeetingSeries, String> {
+    store::create_meeting(&db.0.lock().unwrap(), &meeting).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_meetings(db: State<Db>) -> Result<Vec<store::MeetingSeries>, String> {
+    store::list_meetings(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_workday_location(db: State<Db>, date: String, location: String) -> Result<(), String> {
     store::set_workday_location(&db.0.lock().unwrap(), &date, &location).map_err(|e| e.to_string())
 }
@@ -228,6 +238,8 @@ pub fn run() {
             update_entry,
             delete_entry,
             list_entries,
+            create_meeting,
+            list_meetings,
             set_workday_location,
             list_workday_locations,
             export_xlsx,

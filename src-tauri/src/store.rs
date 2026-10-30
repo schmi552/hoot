@@ -11,7 +11,7 @@ pub struct Category {
 }
 
 /// The schema version that the newest migration creates.
-pub const LATEST_VERSION: i64 = 3;
+pub const LATEST_VERSION: i64 = 4;
 
 /// Times are "HH:MM" in the zone `tz`. `effective_from` is not part of it: a save always starts today.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -60,6 +60,30 @@ pub fn migrations() -> Migrations<'static> {
             "CREATE TABLE workday_location (
                 date TEXT PRIMARY KEY,
                 location TEXT NOT NULL CHECK (location IN ('home', 'office'))
+            );",
+        ),
+        // A series holds one rule; TypeScript expands it. `start_local` is "YYYY-MM-DDTHH:MM" in `tz`.
+        M::up(
+            "CREATE TABLE meeting_series (
+                id INTEGER PRIMARY KEY,
+                category_id INTEGER NOT NULL REFERENCES category(id),
+                title TEXT NOT NULL,
+                start_local TEXT NOT NULL,
+                duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+                tz TEXT NOT NULL,
+                rrule TEXT,
+                source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ics')),
+                ics_uid TEXT
+            );
+            CREATE TABLE meeting_exception (
+                series_id INTEGER NOT NULL REFERENCES meeting_series(id) ON DELETE CASCADE,
+                original_start_local TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('skip', 'override')),
+                start_local TEXT,
+                duration_minutes INTEGER,
+                title TEXT,
+                category_id INTEGER REFERENCES category(id),
+                PRIMARY KEY (series_id, original_start_local)
             );",
         ),
     ])
@@ -217,6 +241,44 @@ pub fn add_category(conn: &Connection, name: &str) -> Result<Category> {
 pub fn list_categories(conn: &Connection) -> Result<Vec<Category>> {
     conn.prepare("SELECT id, name FROM category WHERE archived_at IS NULL ORDER BY name")?
         .query_map([], |r| Ok(Category { id: r.get(0)?, name: r.get(1)? }))?
+        .collect()
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingSeries {
+    pub id: i64,
+    pub category_id: i64,
+    pub title: String,
+    pub start_local: String,
+    pub duration_minutes: i64,
+    pub tz: String,
+    pub rrule: Option<String>,
+}
+
+/// Save a new Meeting series. The `id` of `m` is ignored.
+pub fn create_meeting(conn: &Connection, m: &MeetingSeries) -> Result<MeetingSeries> {
+    conn.execute(
+        "INSERT INTO meeting_series (category_id, title, start_local, duration_minutes, tz, rrule) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        (m.category_id, &m.title, &m.start_local, m.duration_minutes, &m.tz, &m.rrule),
+    )?;
+    Ok(MeetingSeries { id: conn.last_insert_rowid(), ..m.clone() })
+}
+
+/// All Meeting series. There are few, so TypeScript expands them for the visible range.
+pub fn list_meetings(conn: &Connection) -> Result<Vec<MeetingSeries>> {
+    conn.prepare("SELECT id, category_id, title, start_local, duration_minutes, tz, rrule FROM meeting_series ORDER BY id")?
+        .query_map([], |r| {
+            Ok(MeetingSeries {
+                id: r.get(0)?,
+                category_id: r.get(1)?,
+                title: r.get(2)?,
+                start_local: r.get(3)?,
+                duration_minutes: r.get(4)?,
+                tz: r.get(5)?,
+                rrule: r.get(6)?,
+            })
+        })?
         .collect()
 }
 
@@ -378,5 +440,26 @@ mod tests {
         assert_eq!(list_workday_locations(&conn, "2026-10-01", "2026-10-31").unwrap().len(), 2);
         assert_eq!(list_workday_locations(&conn, "2026-11-01", "2026-11-30").unwrap(), vec![]);
         assert!(set_workday_location(&conn, "2026-10-31", "moon").is_err());
+    }
+
+    #[test]
+    fn a_meeting_series_is_read_back_and_a_bad_duration_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let c = add_category(&conn, "A").unwrap();
+        let m = MeetingSeries {
+            id: 0,
+            category_id: c.id,
+            title: "Standup".into(),
+            start_local: "2026-03-23T10:00".into(),
+            duration_minutes: 30,
+            tz: "Europe/Berlin".into(),
+            rrule: Some("FREQ=DAILY".into()),
+        };
+
+        let saved = create_meeting(&conn, &m).unwrap();
+
+        assert_eq!(list_meetings(&conn).unwrap(), vec![saved]);
+        assert!(create_meeting(&conn, &MeetingSeries { duration_minutes: 0, ..m }).is_err());
     }
 }

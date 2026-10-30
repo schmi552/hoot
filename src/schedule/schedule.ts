@@ -105,15 +105,24 @@ export function nextFreeSlot(entries: (Span & { id: number })[], span: Span): Sp
 
 type WorkHours = { workStart: string; workEnd: string; lunchStart: string; lunchEnd: string; tz: string; intervalMinutes: number };
 
-/** The parts of [fromUtc, toUtc] that are work time on the day of `toUtc`: inside work hours, lunch cut out, whole minutes. Empty on a weekend. */
-export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number): Span[] {
+/** The parts of `spans` that `cuts` do not cover. */
+export function subtractSpans(spans: Span[], cuts: Span[]): Span[] {
+  return cuts.reduce(
+    (rest, c) => rest.flatMap((p) => [{ startUtc: p.startUtc, endUtc: Math.min(p.endUtc, c.startUtc) }, { startUtc: Math.max(p.startUtc, c.endUtc), endUtc: p.endUtc }].filter((x) => x.endUtc > x.startUtc)),
+    spans,
+  );
+}
+
+/** The parts of [fromUtc, toUtc] that are work time on the day of `toUtc`: inside work hours, lunch and `busy` spans (Meetings) cut out, whole minutes. Empty on a weekend. */
+export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number, busy: Span[] = []): Span[] {
   const day = ymdIn(s.tz, toUtc);
   if ([0, 6].includes(weekday(day))) return [];
   const at = (hm: string) => instantAt(s.tz, day, parseHM(hm));
   const end = toUtc - (toUtc % 60);
-  return [[s.workStart, s.lunchStart], [s.lunchEnd, s.workEnd]]
+  const work = [[s.workStart, s.lunchStart], [s.lunchEnd, s.workEnd]]
     .map(([a, b]) => ({ startUtc: Math.max(at(a), fromUtc), endUtc: Math.min(at(b), end) }))
     .filter((p) => p.endUtc > p.startUtc);
+  return subtractSpans(work, busy);
 }
 
 const lastEndBefore = (entries: Span[], nowUtc: number) => Math.max(0, ...entries.filter((e) => e.endUtc <= nowUtc).map((e) => e.endUtc));
@@ -125,9 +134,9 @@ export const GAP_MARGIN_MINUTES = 5;
  * The Gap at `nowUtc`, or null. It starts at the later of the last Entry end and the last answered or skipped popup,
  * has lunch and time outside work hours cut out, and shows only while work goes on and only for the current workday.
  */
-export function gapDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number): Span[] | null {
-  if (!popupDue(s, nowUtc, entries, lastPromptUtc)) return null;
-  const spans = popupSpans(s, Math.max(lastEndBefore(entries, nowUtc), lastPromptUtc), nowUtc);
+export function gapDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number, meetings: Span[] = []): Span[] | null {
+  if (!popupDue(s, nowUtc, entries, lastPromptUtc, meetings)) return null;
+  const spans = popupSpans(s, Math.max(lastEndBefore(entries, nowUtc), lastPromptUtc), nowUtc, meetings);
   const seconds = spans.reduce((sum, p) => sum + p.endUtc - p.startUtc, 0);
   return seconds > (s.intervalMinutes + GAP_MARGIN_MINUTES) * 60 ? spans : null;
 }
@@ -144,12 +153,13 @@ export function splitGap(spans: Span[], cutsUtc: number[]): Span[][] {
  * The time a popup at `nowUtc` asks about, or null if no popup is due. A popup is due when a full interval has passed since
  * the last Entry ended, the last popup was answered or skipped (`lastPromptUtc`), or work began today, whichever is latest.
  */
-export function popupDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number): Span[] | null {
+export function popupDue(s: WorkHours, nowUtc: number, entries: Span[], lastPromptUtc: number, meetings: Span[] = []): Span[] | null {
+  if (meetings.some((m) => m.startUtc <= nowUtc && m.endUtc > nowUtc)) return null; // no popup during a Meeting
   if (entries.some((e) => e.startUtc <= nowUtc && e.endUtc > nowUtc)) return null; // an Entry already covers now
   const lastEnd = lastEndBefore(entries, nowUtc);
   const workStart = instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(s.workStart));
   if (nowUtc - Math.max(lastEnd, lastPromptUtc, workStart) < s.intervalMinutes * 60) return null;
-  const spans = popupSpans(s, lastEnd, nowUtc);
+  const spans = popupSpans(s, lastEnd, nowUtc, meetings);
   // Ask only while work is going on: the cut-out spans may still hold unlogged time, but not at lunch or after work.
   const inside = (a: string, b: string) => nowUtc >= instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(a)) && nowUtc < instantAt(s.tz, ymdIn(s.tz, nowUtc), parseHM(b));
   const working = inside(s.workStart, s.workEnd) && !inside(s.lunchStart, s.lunchEnd);

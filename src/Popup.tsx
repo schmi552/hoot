@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
+import { expandMeetings, MeetingSeries } from "./schedule/meetings";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
@@ -37,8 +38,9 @@ export function Popup() {
       const settings = await invoke<Settings | null>("get_settings");
       if (!settings) return;
       const entries = await invoke<Entry[]>("list_entries", { fromUtc: nowUtc - HISTORY_DAYS * 86_400, toUtc: nowUtc });
-      const gapSpans = gapDue(settings, nowUtc, entries, lastPrompt.current);
-      const spans = gapSpans ?? popupDue(settings, nowUtc, entries, lastPrompt.current) ?? (force ? [{ startUtc: nowUtc - settings.intervalMinutes * 60, endUtc: nowUtc }] : null);
+      const meetings = expandMeetings(await invoke<MeetingSeries[]>("list_meetings"), nowUtc - HISTORY_DAYS * 86_400, nowUtc + 86_400);
+      const gapSpans = gapDue(settings, nowUtc, entries, lastPrompt.current, meetings);
+      const spans = gapSpans ?? popupDue(settings, nowUtc, entries, lastPrompt.current, meetings) ?? (force ? [{ startUtc: nowUtc - settings.intervalMinutes * 60, endUtc: nowUtc }] : null);
       if (!spans || asking.current) return;
       const categories = await invoke<Category[]>("list_categories");
       const last = entries.filter((e) => e.endUtc === spans[0].startUtc)[0] ?? null; // only an Entry that touches the span can be extended
