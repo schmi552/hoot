@@ -14,8 +14,13 @@ struct Db(Mutex<rusqlite::Connection>);
 struct StartupFailure(Mutex<Option<safety::Failure>>);
 
 #[tauri::command]
-fn add_category(db: State<Db>, name: String) -> Result<store::Category, String> {
-    store::add_category(&db.0.lock().unwrap(), &name).map_err(|e| e.to_string())
+fn add_category(db: State<Db>, code: String, name: String) -> Result<store::Category, String> {
+    store::add_category(&db.0.lock().unwrap(), &code, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_category(db: State<Db>, id: i64, code: String, color: i64) -> Result<(), String> {
+    store::update_category(&db.0.lock().unwrap(), id, &code, color).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -270,6 +275,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             add_category,
+            update_category,
             list_categories,
             remove_category,
             get_settings,

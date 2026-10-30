@@ -184,7 +184,7 @@ mod tests {
     fn dir_with_data() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         let conn = open_with(dir.path(), &first_migration(), 1).unwrap();
-        store::add_category(&conn, "Project A").unwrap();
+        conn.execute("INSERT INTO category (name) VALUES ('Project A')", []).unwrap();
         dir
     }
 

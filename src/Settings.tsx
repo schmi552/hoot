@@ -10,7 +10,7 @@ export type Settings = {
   tz: string;
   intervalMinutes: number;
 };
-type Category = { id: number; name: string };
+type Category = { id: number; code: string; name: string; color: number };
 
 const defaults = (): Settings => ({
   workStart: "09:00",
@@ -34,6 +34,7 @@ export function validate(s: Settings): string {
 export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSaved: () => void }) {
   const [s, setS] = useState<Settings>(saved ?? defaults());
   const [categories, setCategories] = useState<Category[]>([]);
+  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
@@ -56,11 +57,16 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
   const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
   const save = () => invoke("save_settings", { settings: s }).then(onSaved, fail);
   const add = () =>
-    invoke("add_category", { name: name.trim() }).then(() => {
+    invoke("add_category", { code: code.trim(), name: name.trim() }).then(() => {
+      setCode("");
       setName("");
       setMessage("");
       refresh();
     }, fail);
+  const change = (c: Category, patch: Partial<Category>) => {
+    const n = { ...c, ...patch };
+    invoke("update_category", { id: c.id, code: n.code.trim(), color: n.color }).then(() => setMessage(""), fail).then(refresh);
+  };
   const remove = (c: Category) =>
     invoke<boolean>("remove_category", { id: c.id }).then((archived) => {
       setMessage(archived ? `${c.name} has Entries, so it is archived.` : "");
@@ -98,11 +104,37 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
       <ul>
         {categories.map((c) => (
           <li key={c.id}>
-            {c.name} <button className="wt-chip" onClick={() => remove(c)}>Remove</button>
+            <input
+              key={c.code}
+              className="wt-input"
+              aria-label={`Code of ${c.name}`}
+              size={8}
+              defaultValue={c.code}
+              onBlur={(e) => e.target.value.trim() !== c.code && change(c, { code: e.target.value })}
+            />{" "}
+            {c.name}{" "}
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <button
+                key={n}
+                type="button"
+                aria-label={`Color ${n} for ${c.name}`}
+                aria-pressed={c.color === n}
+                onClick={() => change(c, { color: n })}
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  border: c.color === n ? "2px solid var(--color-text)" : "1px solid transparent",
+                  background: `var(--cat-${n}-solid)`,
+                }}
+              />
+            ))}{" "}
+            <button className="wt-chip" onClick={() => remove(c)}>Remove</button>
           </li>
         ))}
       </ul>
       <div className="wt-startup-actions">
+        <input className="wt-input" aria-label="New Category code" size={8} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
         <input
           className="wt-input"
           aria-label="New Category"
