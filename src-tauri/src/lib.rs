@@ -89,6 +89,21 @@ fn list_meeting_exceptions(db: State<Db>) -> Result<Vec<store::MeetingException>
 }
 
 #[tauri::command]
+fn create_absence(db: State<Db>, absence: store::Absence) -> Result<store::Absence, String> {
+    store::create_absence(&db.0.lock().unwrap(), &absence).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_absences(db: State<Db>) -> Result<Vec<store::Absence>, String> {
+    store::list_absences(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_absence(db: State<Db>, id: i64) -> Result<(), String> {
+    store::delete_absence(&db.0.lock().unwrap(), id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_workday_location(db: State<Db>, date: String, location: String) -> Result<(), String> {
     store::set_workday_location(&db.0.lock().unwrap(), &date, &location).map_err(|e| e.to_string())
 }
@@ -264,6 +279,9 @@ pub fn run() {
             delete_meeting,
             set_meeting_exception,
             list_meeting_exceptions,
+            create_absence,
+            list_absences,
+            delete_absence,
             set_workday_location,
             list_workday_locations,
             export_xlsx,

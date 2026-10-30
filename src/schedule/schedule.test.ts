@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, splitGap, recentEntries, resizedEnd } from "./schedule";
+import { absenceSpans } from "./absences";
+import { expectedOn, dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, splitGap, recentEntries, resizedEnd } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -162,4 +163,39 @@ test("a Gap splits at the given times and lunch stays out of the parts", () => {
     [{ startUtc: t(13, 30), endUtc: t(14) }],
   ]);
   expect(splitGap(spans, [t(12, 30)])[1]).toEqual([{ startUtc: t(13), endUtc: t(14) }]);
+});
+
+test("an Absence reduces the expected time of a day and is not logged time", () => {
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
+  const monday = { y: 2026, m: 8, d: 3 };
+  const at = (h: number) => instantAt(s.tz, monday, h * 60);
+  const none = { id: 0, label: "", startDate: null, endDate: null, startUtc: null, endUtc: null, tz: null };
+  const part = absenceSpans([{ ...none, startUtc: at(14), endUtc: at(16), tz: s.tz }], s.tz);
+  const twoDays = absenceSpans([{ ...none, startDate: "2026-08-03", endDate: "2026-08-04" }], s.tz);
+
+  expect(expectedOn(s, monday)).toBe(7 * 60);
+  expect(expectedOn(s, monday, part)).toBe(5 * 60);
+  expect(expectedOn(s, monday, twoDays)).toBe(0);
+  expect(expectedOn(s, { ...monday, d: 5 }, twoDays)).toBe(7 * 60); // the day after the range
+  expect(expectedOn(s, { ...monday, d: 8 }, absenceSpans([{ ...none, startDate: "2026-08-08", endDate: "2026-08-08" }], s.tz))).toBe(0); // a Saturday stays at zero
+});
+
+test("no popup is due during an Absence", () => {
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
+  const day = { y: 2026, m: 8, d: 3 };
+  const now = instantAt(s.tz, day, 10 * 60);
+  const off = absenceSpans([{ id: 0, label: "", startDate: "2026-08-03", endDate: "2026-08-03", startUtc: null, endUtc: null, tz: null }], s.tz);
+
+  expect(popupDue(s, now, [], 0, [])).not.toBeNull();
+  expect(popupDue(s, now, [], 0, off)).toBeNull();
+});
+
+test("a Gap leaves out an Absence", () => {
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30 };
+  const day = { y: 2026, m: 8, d: 3 };
+  const at = (h: number) => instantAt(s.tz, day, h * 60);
+  const off = [{ startUtc: at(9), endUtc: at(10) }];
+
+  expect(gapDue(s, at(11), [], 0, [])).toEqual([{ startUtc: at(9), endUtc: at(11) }]);
+  expect(gapDue(s, at(11), [], 0, off)).toEqual([{ startUtc: at(10), endUtc: at(11) }]);
 });

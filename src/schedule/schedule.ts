@@ -125,6 +125,12 @@ export function popupSpans(s: WorkHours, fromUtc: number, toUtc: number, busy: S
   return subtractSpans(work, busy);
 }
 
+/** Expected work on the day `ymd`: work time without lunch and without `absences`. Zero on a weekend. */
+export function expectedOn(s: WorkHours, ymd: Ymd, absences: Span[] = []): number {
+  const [from, to] = dayBoundsIn(s.tz, ymd);
+  return popupSpans(s, from, to - 1, absences).reduce((sum, p) => sum + minutesBetween(p.startUtc, p.endUtc), 0);
+}
+
 const lastEndBefore = (entries: Span[], nowUtc: number) => Math.max(0, ...entries.filter((e) => e.endUtc <= nowUtc).map((e) => e.endUtc));
 
 /** A Gap must be longer than the popup interval by more than this, so a late tick is not a Gap. */

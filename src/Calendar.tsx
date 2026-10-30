@@ -11,8 +11,9 @@ import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, ymdIn,
 } from "./schedule/schedule";
+import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ErrorLine } from "./Popup";
@@ -34,6 +35,8 @@ const localInput = (tz: string, sec: number) => {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 };
 type MeetingForm = { title: string; categoryId: number; start: string; duration: number; repeat: Repeat; editing?: MeetingOccurrence };
+/** The Absence dialog. A full-day Absence uses `from` and `to` as dates; a part-day Absence uses them as "YYYY-MM-DDTHH:MM". */
+type AbsenceForm = { label: string; allDay: boolean; from: string; to: string };
 /** What the scope dialog is asking about: the changed form of a Meeting, or a delete. */
 type Scope = { occurrence: MeetingOccurrence; form?: MeetingForm };
 
@@ -57,6 +60,9 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [meetingForm, setMeetingForm] = useState<MeetingForm | null>(null);
   const [exceptions, setExceptions] = useState<MeetingException[]>([]);
   const [scope, setScope] = useState<Scope | null>(null);
+  const [absences, setAbsences] = useState<Absence[]>([]);
+  const [absenceForm, setAbsenceForm] = useState<AbsenceForm | null>(null);
+  const [pickedAbsence, setPickedAbsence] = useState<Absence | null>(null);
   const [menu, setMenu] = useState(false);
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
@@ -85,6 +91,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
   useEffect(() => void invoke<MeetingSeries[]>("list_meetings").then(setSeries), [reload]);
   useEffect(() => void invoke<MeetingException[]>("list_meeting_exceptions").then(setExceptions), [reload]);
+  useEffect(() => void invoke<Absence[]>("list_absences").then(setAbsences), [reload]);
   const meetings = range ? expandMeetings(series, exceptions, range[0], range[1]) : [];
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);
@@ -142,6 +149,26 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       (e) => (setError(String(e)), setFailed(true)),
     );
   };
+  const openAbsence = (from?: string, to?: string) => {
+    setMenu(false);
+    setPicked(null);
+    const day = dateKey(ymdIn(settings.tz, Date.now() / 1000));
+    setAbsenceForm({ label: "", allDay: true, from: from ?? day, to: to ?? from ?? day });
+    setError("");
+    setFailed(false);
+  };
+  const saveAbsence = () => {
+    const f = absenceForm!;
+    const empty = { startDate: null, endDate: null, startUtc: null, endUtc: null, tz: null };
+    const instant = (local: string) => Temporal.ZonedDateTime.from(`${local}:00[${settings.tz}]`).epochMilliseconds / 1000;
+    if (!f.label.trim() || !f.from || !f.to || f.to < f.from || (!f.allDay && f.to <= f.from)) return setError("Give the Absence a label and a range that ends after it starts."), setFailed(false);
+    const absence = { id: 0, label: f.label.trim(), ...empty, ...(f.allDay ? { startDate: f.from, endDate: f.to } : { startUtc: instant(f.from), endUtc: instant(f.to), tz: settings.tz }) };
+    invoke("create_absence", { absence }).then(
+      () => (setAbsenceForm(null), load()),
+      (e) => (setError(String(e)), setFailed(true)),
+    );
+  };
+  const deleteAbsence = (a: Absence) => invoke("delete_absence", { id: a.id }).then(() => (setPickedAbsence(null), load()), fail);
   const close = () => {
     setSlot(null);
     setEditing(null);
@@ -205,11 +232,13 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
   onKey.current = (e) => {
-    if (slot || meetingForm || scope || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    if (slot || meetingForm || absenceForm || scope || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
     const k = e.key.toLowerCase();
     const mod = e.metaKey || e.ctrlKey;
     const keep = () => e.preventDefault();
     if (k === "m" && !mod) return keep(), openMeeting();
+    if (k === "a" && !mod) return keep(), openAbsence();
+    if (pickedAbsence && !mod && (k === "delete" || k === "backspace")) return keep(), void deleteAbsence(pickedAbsence);
     if (mod && k === "c" && pickedMeeting) {
       clipboard.current = { id: 0, categoryId: pickedMeeting.categoryId, description: pickedMeeting.title, startUtc: pickedMeeting.startUtc, endUtc: pickedMeeting.endUtc, tz: settings.tz };
       return;
@@ -263,7 +292,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   // The header date is the start of the day in the zone of the settings.
   const dayOf = (d: Date) => ymdIn(settings.tz, secs(d));
-  const expected = (d: Date) => ([0, 6].includes(weekday(dayOf(d))) ? 0 : expectedMinutes(settings));
+  const away = absenceSpans(absences, settings.tz);
+  const expected = (d: Date) => expectedOn(settings, dayOf(d), away);
   const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
   const where = (d: Date) => ({ home: "Home", office: "Office" })[locations[dateKey(dayOf(d))]] ?? "";
   const daySub = (d: Date) => `${formatHM(logged(d))} / ${formatHM(expected(d))}${where(d) && ` · ${where(d)}`}`;
@@ -284,6 +314,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         <button className="wt-chip" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
         {menu && <button className="wt-chip" onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>}
         {menu && <button className="wt-chip" onClick={openMeeting}>Meeting (M)</button>}
+        {menu && <button className="wt-chip" onClick={() => openAbsence()}>Absence (A)</button>}
       </span>
       {pickedMeeting && (
         <>
@@ -291,6 +322,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <button className="wt-chip" onClick={() => askScope({ occurrence: pickedMeeting })}>Delete Meeting</button>
         </>
       )}
+      {pickedAbsence && <button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button>}
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
       {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
@@ -341,6 +373,26 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <ErrorLine error={error} retry={failed ? saveMeeting : undefined} />
         </form>
       )}
+      {absenceForm && (
+        <form
+          className="wt-form wt-editor"
+          onKeyDown={(e) => e.key === "Escape" && setAbsenceForm(null)}
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveAbsence();
+          }}
+        >
+          <input className="wt-input" aria-label="Label" placeholder="Label (Vacation, Sick)" autoFocus value={absenceForm.label} onChange={(e) => setAbsenceForm({ ...absenceForm, label: e.target.value })} />
+          <label className="wt-sub">
+            <input type="checkbox" checked={absenceForm.allDay} onChange={(e) => setAbsenceForm({ ...absenceForm, allDay: e.target.checked, from: absenceForm.from.slice(0, 10) + (e.target.checked ? "" : "T" + settings.workStart), to: absenceForm.to.slice(0, 10) + (e.target.checked ? "" : "T" + settings.workEnd) })} /> All day
+          </label>
+          <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} aria-label="From" value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} />
+          <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} aria-label="To" value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} />
+          <button className="wt-chip is-primary" type="submit">Save</button>
+          <button className="wt-chip" type="button" onClick={() => setAbsenceForm(null)}>Cancel</button>
+          <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
+        </form>
+      )}
       {scope && (
         <form className="wt-form wt-editor" role="alertdialog" aria-label="Which Meetings" onKeyDown={(e) => e.key === "Escape" && setScope(null)} onSubmit={(e) => e.preventDefault()}>
           <span className="wt-sub">{scope.form ? "Change" : "Delete"}:</span>
@@ -356,7 +408,6 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         timeZone={settings.tz}
         initialView="timeGridWeek"
         headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridWeek,dayGridMonth" }}
-        allDaySlot={false}
         firstDay={1}
         nowIndicator
         height="auto"
@@ -365,13 +416,15 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         scrollTime={settings.workStart + ":00"}
         selectable
         selectMirror
-        selectOverlap={(ev) => !!ev.extendedProps.meeting} // a Meeting never blocks an Entry
+        selectOverlap={(ev) => !!ev.extendedProps.meeting || !!ev.extendedProps.absence} // a Meeting or an Absence never blocks an Entry
         editable
         views={{ dayGridMonth: { editable: false } }} // the month view only shows and navigates
         eventClick={(i) => {
           const m = i.event.extendedProps.meeting as MeetingOccurrence | undefined;
+          const a = i.event.extendedProps.absence as Absence | undefined;
           setPickedMeeting(m ?? null);
-          setSelected(m ? 0 : Number(i.event.id));
+          setPickedAbsence(a ?? null);
+          setSelected(m || a ? 0 : Number(i.event.id));
         }}
         eventDidMount={(i) => void (i.el.dataset.id = i.event.id)}
         eventDrop={(i) => {
@@ -388,10 +441,14 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           if (i.view.type === "dayGridMonth") return setPicked(null), setSelected(0), i.view.calendar.changeView("timeGridWeek", i.date); // the day opens in the week view
           setPicked(i.date);
           setPickedMeeting(null);
+          setPickedAbsence(null);
           setSelected(0);
         }}
         select={(i) => {
-          if (i.view.type === "timeGridWeek") open({ start: i.start, end: i.end });
+          if (i.allDay && i.view.type === "timeGridWeek") {
+            i.view.calendar.unselect();
+            openAbsence(i.startStr.slice(0, 10), Temporal.PlainDate.from(i.endStr.slice(0, 10)).subtract({ days: 1 }).toString()); // FullCalendar's end day is not included
+          } else if (i.view.type === "timeGridWeek") open({ start: i.start, end: i.end });
           else i.view.calendar.unselect(); // a drag across month cells is not an Entry
         }}
         datesSet={(i) => setRange([secs(i.start), secs(i.end)])}
@@ -411,6 +468,14 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             editable: false,
             classNames: ["wt-meeting"],
             extendedProps: { meeting: m },
+          })),
+          ...absences.map((a) => ({
+            id: `a${a.id}`,
+            title: a.label,
+            ...(a.startDate ? { start: a.startDate, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), allDay: true } : { start: new Date(a.startUtc! * 1000), end: new Date(a.endUtc! * 1000) }),
+            editable: false,
+            classNames: ["wt-absence"],
+            extendedProps: { absence: a },
           })),
           ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}

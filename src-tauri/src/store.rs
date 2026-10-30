@@ -11,7 +11,7 @@ pub struct Category {
 }
 
 /// The schema version that the newest migration creates.
-pub const LATEST_VERSION: i64 = 4;
+pub const LATEST_VERSION: i64 = 5;
 
 /// Times are "HH:MM" in the zone `tz`. `effective_from` is not part of it: a save always starts today.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -84,6 +84,22 @@ pub fn migrations() -> Migrations<'static> {
                 title TEXT,
                 category_id INTEGER REFERENCES category(id),
                 PRIMARY KEY (series_id, original_start_local)
+            );",
+        ),
+        // A full-day Absence holds local dates (inclusive); a part-day Absence holds UTC instants and the zone they were entered in.
+        M::up(
+            "CREATE TABLE absence (
+                id INTEGER PRIMARY KEY,
+                label TEXT NOT NULL,
+                start_date TEXT,
+                end_date TEXT,
+                start_utc INTEGER,
+                end_utc INTEGER,
+                tz TEXT,
+                CHECK (
+                    (start_date IS NOT NULL AND end_date >= start_date AND start_utc IS NULL AND end_utc IS NULL AND tz IS NULL)
+                    OR (start_date IS NULL AND end_date IS NULL AND end_utc > start_utc AND tz IS NOT NULL)
+                )
             );",
         ),
     ])
@@ -341,6 +357,41 @@ pub fn list_meeting_exceptions(conn: &Connection) -> Result<Vec<MeetingException
         .collect()
 }
 
+/// Time away. A full-day Absence has `start_date` and `end_date` ("YYYY-MM-DD", both included); a part-day Absence has `start_utc`, `end_utc` and `tz`.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Absence {
+    pub id: i64,
+    pub label: String,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub start_utc: Option<i64>,
+    pub end_utc: Option<i64>,
+    pub tz: Option<String>,
+}
+
+/// Save a new Absence. The `id` of `a` is ignored. The table refuses a row that is neither a full-day nor a part-day Absence.
+pub fn create_absence(conn: &Connection, a: &Absence) -> Result<Absence> {
+    conn.execute(
+        "INSERT INTO absence (label, start_date, end_date, start_utc, end_utc, tz) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        (&a.label, &a.start_date, &a.end_date, a.start_utc, a.end_utc, &a.tz),
+    )?;
+    Ok(Absence { id: conn.last_insert_rowid(), ..a.clone() })
+}
+
+/// All Absences. There are few, so TypeScript picks the ones in the visible range.
+pub fn list_absences(conn: &Connection) -> Result<Vec<Absence>> {
+    conn.prepare("SELECT id, label, start_date, end_date, start_utc, end_utc, tz FROM absence ORDER BY id")?
+        .query_map([], |r| {
+            Ok(Absence { id: r.get(0)?, label: r.get(1)?, start_date: r.get(2)?, end_date: r.get(3)?, start_utc: r.get(4)?, end_utc: r.get(5)?, tz: r.get(6)? })
+        })?
+        .collect()
+}
+
+pub fn delete_absence(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM absence WHERE id = ?1", [id]).map(drop)
+}
+
 #[derive(Serialize, Debug, PartialEq)]
 pub struct WorkdayLocation {
     pub date: String,
@@ -548,5 +599,22 @@ mod tests {
         delete_meeting(&conn, m.id).unwrap();
         assert!(list_meetings(&conn).unwrap().is_empty());
         assert!(list_meeting_exceptions(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_absence_of_either_kind_is_read_back_and_a_mixed_one_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let full = Absence { id: 0, label: "Vacation".into(), start_date: Some("2026-08-03".into()), end_date: Some("2026-08-07".into()), start_utc: None, end_utc: None, tz: None };
+        let part = Absence { id: 0, label: "Doctor".into(), start_date: None, end_date: None, start_utc: Some(1000), end_utc: Some(4600), tz: Some("Europe/Berlin".into()) };
+
+        let saved = vec![create_absence(&conn, &full).unwrap(), create_absence(&conn, &part).unwrap()];
+
+        assert_eq!(list_absences(&conn).unwrap(), saved);
+        assert!(create_absence(&conn, &Absence { end_date: Some("2026-08-02".into()), ..full.clone() }).is_err());
+        assert!(create_absence(&conn, &Absence { start_date: Some("2026-08-03".into()), ..part.clone() }).is_err());
+        assert!(create_absence(&conn, &Absence { end_utc: Some(1000), ..part }).is_err());
+        delete_absence(&conn, saved[0].id).unwrap();
+        assert_eq!(list_absences(&conn).unwrap(), vec![saved[1].clone()]);
     }
 }
