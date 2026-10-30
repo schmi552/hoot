@@ -13,6 +13,7 @@ import {
   dateKey, dayBoundsIn, expectedMinutes, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, Span, STEP, weekday, ymdIn,
 } from "./schedule/schedule";
 import { ExportDialog } from "./Export";
+import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
@@ -38,6 +39,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [categoryId, setCategoryId] = useState(0);
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
+  const [failed, setFailed] = useState(false); // the last editor write failed, so the error line offers a retry
   const [editing, setEditing] = useState<Entry | null>(null);
   const [selected, setSelected] = useState(0);
   const [notice, setNotice] = useState("");
@@ -77,6 +79,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     setCategoryId(entry?.categoryId ?? categories[0]?.id ?? 0);
     setDescription(entry?.description ?? "");
     setError(categories.length ? "" : "Add a Category in Settings first.");
+    setFailed(false);
   };
   const close = () => {
     setSlot(null);
@@ -126,7 +129,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const save = () => {
     if (!slot) return;
     const entry = { ...(editing ?? { id: 0, startUtc: secs(slot.start), endUtc: secs(slot.end), tz: settings.tz }), categoryId, description: description.trim() };
-    commit(editing, entry).then(close, (e) => setError(String(e)));
+    commit(editing, entry).then(close, (e) => (setError(String(e)), setFailed(true)));
   };
 
   // Where a new Entry goes when no slot is picked: right after the last Entry of today.
@@ -231,7 +234,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <input className="wt-input" aria-label="Description" autoFocus value={description} onChange={(e) => setDescription(e.target.value)} />
           <button className="wt-chip is-primary" type="submit" disabled={!categoryId}>Save</button>
           <button className="wt-chip" type="button" onClick={close}>Cancel</button>
-          <p className="wt-error" role="alert">{error}</p>
+          <ErrorLine error={error} retry={failed ? save : undefined} />
         </form>
       )}
       <FullCalendar

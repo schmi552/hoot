@@ -127,6 +127,19 @@ fn set_popup_visible(app: AppHandle, visible: bool) {
     }
 }
 
+/// Tell the user about a failed save when the popup is hidden, so the failure is not silent.
+#[tauri::command]
+fn report_save_failure(app: AppHandle) {
+    let hidden = app.get_webview_window("popup").is_none_or(|w| !w.is_visible().unwrap_or(false));
+    if hidden {
+        let _ = tauri_plugin_notification::NotificationExt::notification(&app)
+            .builder()
+            .title("Work Tracker")
+            .body("Could not save. Open the app.")
+            .show();
+    }
+}
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Tick {
@@ -161,6 +174,7 @@ fn show_main(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -219,6 +233,7 @@ pub fn run() {
             restore_latest_backup,
             show_backups_folder,
             set_popup_visible,
+            report_save_failure,
             quit
         ])
         .run(tauri::generate_context!())

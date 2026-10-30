@@ -17,6 +17,7 @@ rusqlite_migration = "2"
 serde = { version = "1", features = ["derive"] }
 rust_xlsxwriter = "0.102.0"
 tauri-plugin-dialog = "2.8.4"
+tauri-plugin-notification = "2.8.0"
 
 [dev-dependencies]
 calamine = "0.37.0"

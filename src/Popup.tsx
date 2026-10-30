@@ -67,6 +67,8 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
   const [categoryId, setCategoryId] = useState(recents[0]?.categoryId ?? categories[0]?.id ?? 0);
   const [error, setError] = useState(categories.length ? "" : "Add a Category in Settings first.");
   const [saved, setSaved] = useState(false);
+  const [failed, setFailed] = useState(false); // the last write failed, so the error line offers a retry
+  const again = useRef(false); // whether the failed save was "still"
   const written = useRef(0); // spans already stored, so a retry after a failure does not store them twice
   const input = useRef<HTMLInputElement>(null);
   const thread = useRef<HTMLDivElement>(null);
@@ -81,6 +83,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
     if (!source.description) return setError("Type what you did.");
     if (!source.categoryId) return setError("Pick a Category.");
     const answer = still ? "Yes, still" : `${source.description} (${category?.name})`;
+    again.current = still;
     const create = (s: Span) => invoke("create_entry", { entry: { id: 0, categoryId: source.categoryId, description: source.description, startUtc: s.startUtc, endUtc: s.endUtc, tz: settings.tz } });
     try {
       // Lunch can split the span in two: the first part extends the last Entry, the rest are new.
@@ -90,10 +93,11 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
         else await create(s);
       }
     } catch (e) {
-      return setError(String(e)); // the answer stays in the form, so Enter tries again
+      return fail(e, setError, setFailed); // the answer stays in the form, so Enter tries again
     }
     emit("entries-changed");
     setError("");
+    setFailed(false);
     setLines([{ me: true, text: answer }]);
     setSaved(true);
     setTimeout(() => onDone(now), 1200);
@@ -139,7 +143,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
           <button type="button" autoFocus className="wt-chip is-primary" onClick={() => setLocation("home")}>Home (H)</button>
           <button type="button" className="wt-chip is-primary" onClick={() => setLocation("office")}>Office (O)</button>
           <button type="button" className="wt-chip" onClick={snooze}>Snooze {SNOOZE_MINUTES} min</button>
-          <div className="wt-error" role="alert">{error}</div>
+          <ErrorLine error={error} />
         </div>
       ) : !saved && (
         <>
@@ -161,12 +165,19 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
               <input ref={input} autoFocus className="wt-input" aria-label="What did you do" placeholder={last ? "...or tell me what you did instead" : "What did you do?"} value={description} onChange={(e) => setDescription(e.target.value)} />
               <button type="button" className="wt-chip is-primary" onClick={() => save(false)}>Send</button>
             </div>
-            <div className="wt-error" role="alert">{error}</div>
+            <ErrorLine error={error} retry={failed ? () => save(again.current) : undefined} />
           </div>
         </>
       )}
     </div>
   );
+}
+
+/** Show a failed write. The popup may be hidden by now, so the app also tells the user outside the window. */
+function fail(e: unknown, setError: (m: string) => void, setFailed: (f: boolean) => void) {
+  setError(String(e));
+  setFailed(true);
+  invoke("report_save_failure");
 }
 
 type Part = { until: string; description: string; categoryId: number }; // `until` is "HH:MM"; the last part has none
@@ -180,6 +191,7 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => v
   const [parts, setParts] = useState<Part[]>([blank()]);
   const [error, setError] = useState(categories.length ? "" : "Add a Category in Settings first.");
   const [saved, setSaved] = useState(false);
+  const [failed, setFailed] = useState(false); // the last write failed, so the error line offers a retry
   const written = useRef(0); // Entries already stored, so a retry after a failure does not store them twice
   const time = (t: number) => new Date(t * 1000).toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" });
   const start = spans[0].startUtc;
@@ -207,10 +219,11 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => v
         await invoke("create_entry", { entry: { id: 0, categoryId: p.categoryId, description: p.description.trim(), startUtc: p.startUtc, endUtc: p.endUtc, tz: settings.tz } });
       }
     } catch (e) {
-      return setError(String(e));
+      return fail(e, setError, setFailed);
     }
     emit("entries-changed");
     setError("");
+    setFailed(false);
     setSaved(true);
     setTimeout(() => onDone(now), 1200);
   };
@@ -272,8 +285,24 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => v
             {mode === "split" && <button type="button" className="wt-chip" onClick={() => setParts((all) => [...all.slice(0, -1), blank(), all[all.length - 1]])}>Add part</button>}
             <button type="button" className="wt-chip is-primary" onClick={save}>Save</button>
           </div>
-          <div className="wt-error" role="alert">{error}</div>
+          <ErrorLine error={error} retry={failed ? save : undefined} />
         </div>
+      )}
+    </div>
+  );
+}
+
+/** An error line. After a failed write it also offers Retry and Copy. */
+export function ErrorLine({ error, retry }: { error: string; retry?: () => void }) {
+  return (
+    <div className="wt-error" role="alert">
+      {error}
+      {error && retry && (
+        <>
+          {" "}
+          <button type="button" className="wt-chip" onClick={retry}>Retry</button>
+          <button type="button" className="wt-chip" onClick={() => navigator.clipboard.writeText(error)}>Copy</button>
+        </>
       )}
     </div>
   );

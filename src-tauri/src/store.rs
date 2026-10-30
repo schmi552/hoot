@@ -349,6 +349,22 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_write_returns_an_error_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = crate::safety::open_safely(dir.path()).unwrap();
+        let c = add_category(&conn, "A").unwrap();
+        let saved = create_entry(&conn, &entry(c.id, 1000, 2000)).unwrap();
+
+        conn.execute_batch("PRAGMA query_only = ON").unwrap(); // every write now fails
+        assert!(create_entry(&conn, &entry(c.id, 3000, 4000)).is_err());
+        assert!(update_entry(&conn, &Entry { end_utc: 1500, ..saved.clone() }).is_err());
+        assert!(delete_entry(&conn, saved.id).is_err());
+
+        conn.execute_batch("PRAGMA query_only = OFF").unwrap();
+        assert_eq!(list_entries(&conn, 0, 10_000).unwrap(), vec![saved]);
+    }
+
+    #[test]
     fn a_workday_location_is_read_back_and_a_new_answer_replaces_the_old_one() {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
