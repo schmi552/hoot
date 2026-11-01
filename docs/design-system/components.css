@@ -412,3 +412,14 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-weekcol-head { box-sizing: border-box; height: var(--month-head-height); padding: var(--space-sm); font-size: var(--text-caption); color: var(--calendar-fg-muted); border-bottom: var(--border-width) solid var(--calendar-border); }
 .wt-weekcol-row { box-sizing: border-box; height: calc(var(--month-row-height) + var(--border-width)); padding: var(--space-sm); display: flex; flex-direction: column; justify-content: flex-end; border-bottom: var(--border-width) solid var(--calendar-border); font-family: var(--font-mono); }
 .wt-weekcol-row span { font-size: var(--text-caption); color: var(--calendar-fg-muted); }
+
+/* ---------- Toolbar ---------- */
+.wt-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-md); margin-bottom: var(--space-md); border-bottom: var(--border-width) solid var(--color-border); }
+.wt-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.wt-toolbar-name { font: var(--text-toolbar-title) var(--font-display); margin-right: var(--space-md); }
+.wt-toolbar-title { margin: 0 0 0 var(--space-sm); font-size: var(--text-title); font-weight: 600; }
+.wt-toolbar .wt-icon-btn { border-radius: 50%; }
+.wt-toolbar .wt-icon-btn:hover { background: var(--chip-bg); }
+.wt-plus { width: var(--input-height); height: var(--input-height); border-radius: 50%; border: 0; background: var(--chip-bg-on); color: var(--chip-fg-on); font: inherit; font-size: var(--text-title); line-height: 1; cursor: pointer; }
+.wt-plus-menu { left: auto; right: 0; translate: 0 var(--space-xs); min-width: 180px; }
+.wt-plus-menu .wt-chip { text-align: left; }

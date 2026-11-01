@@ -12,11 +12,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextCheckIn, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, popupSpans, resizedEnd, settingsOn, SettingsRow, Span, STEP, Ymd, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextCheckIn, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, popupSpans, resizedEnd, settingsOn, SettingsRow, Span, STEP, weekday, Ymd, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
 import { barSegments, DayTotal, daysIn, entryText, gridRange, hiddenDays, rowTotals, shortDay, showsDayTotal, weekShares } from "./schedule/week";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, sourceText } from "./schedule/meetings";
+import { monthTitle, toolbarKey, weekTitle } from "./schedule/toolbar";
 import { ExportDialog } from "./Export";
 import { ImportDialog } from "./Import";
 import { localInput, MeetingAsk, MeetingDialog } from "./MeetingDialog";
@@ -42,6 +43,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const calendar = useRef<CalendarRef>(null);
   const [range, setRange] = useState<[number, number] | null>(null);
   const [isWeek, setIsWeek] = useState(true);
+  const [monthStart, setMonthStart] = useState(0); // the first day of the shown month, for the title
   const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Record<string, string>>({}); // date -> "home" | "office"
@@ -121,6 +123,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   }, [notice]);
 
   const open = (s: Slot, entry: Entry | null = null) => {
+    setMenu(false);
     setSlot(s);
     setEditing(entry);
     setPicked(null);
@@ -221,14 +224,35 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   };
   const edit = (e: Entry) => open({ start: new Date(e.startUtc * 1000), end: new Date(e.endUtc * 1000) }, e);
 
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => (e.target as HTMLElement).closest(".wt-menu-anchor") || setMenu(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menu]);
+  const showView = (week: boolean) => {
+    setMenu(false);
+    setPicked(null);
+    setSelected(0);
+    calendar.current?.getApi().changeView(week ? "timeGridWeek" : "dayGridMonth");
+  };
+  const openImport = () => {
+    setMenu(false);
+    if (categories.length) setImporting(true);
+  };
   const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
   onKey.current = (e) => {
-    if (slot || meeting || absenceForm || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    if (slot || meeting || absenceForm || exporting || importing || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
     const k = e.key.toLowerCase();
     const mod = e.metaKey || e.ctrlKey;
     const keep = () => e.preventDefault();
-    if (k === "m" && !mod) return keep(), openMeeting();
-    if (k === "a" && !mod) return keep(), openAbsence();
+    if (mod && k === ",") return keep(), onSettings();
+    const action = mod ? null : toolbarKey(k, menu);
+    if (action === "today") return keep(), calendar.current?.getApi().today();
+    if (action === "week" || action === "month") return keep(), showView(action === "week");
+    if (action === "meeting") return keep(), openMeeting();
+    if (action === "absence") return keep(), openAbsence();
+    if (action === "import") return keep(), openImport();
     if (pickedAbsence && !mod && (k === "delete" || k === "backspace")) return keep(), void deleteAbsence(pickedAbsence);
     if (mod && k === "c" && pickedMeeting) {
       clipboard.current = { id: 0, categoryId: pickedMeeting.categoryId ?? categories[0]?.id ?? 0, description: pickedMeeting.title, startUtc: pickedMeeting.startUtc, endUtc: pickedMeeting.endUtc, tz: settings.tz };
@@ -312,6 +336,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     const cell = monthEl.current?.querySelector(".wt-month-cell");
     if (cell) setWeekColTop(cell.getBoundingClientRect().top - monthEl.current!.getBoundingClientRect().top - 26); // 26 is --month-head-height
   }); // after every render: the toolbar and the grid can move without a change of ours
+  const shown = days.filter((d) => !hidden.includes(weekday(d)));
+  const title = isWeek ? (shown.length ? weekTitle(shown[0], shown[shown.length - 1]) : "") : monthStart ? monthTitle(ymdIn(settings.tz, monthStart)) : "";
   const empty = isWeek && !!range && !entries.length;
   const next = useMemo(() => {
     const now = Date.now() / 1000;
@@ -329,15 +355,36 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         if (entry) edit(entry);
       }}
     >
-      <button className="wt-chip" onClick={onSettings}>Settings</button>
-      <button className="wt-chip" onClick={() => setExporting(true)}>Export</button>
-      <button className="wt-chip" disabled={!categories.length} title={categories.length ? "" : "Add a Category in Settings first."} onClick={() => setImporting(true)}>Import .ics</button>
-      <span className="wt-menu">
-        <button className="wt-chip" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
-        {menu && <button className="wt-chip" onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>}
-        {menu && <button className="wt-chip" onClick={openMeeting}>Meeting (M)</button>}
-        {menu && <button className="wt-chip" onClick={() => openAbsence()}>Absence (A)</button>}
-      </span>
+      <header className="wt-toolbar">
+        <div className="wt-toolbar-group">
+          <Hoot px={3} show={showMascot} />
+          <span className="wt-toolbar-name">Work Tracker</span>
+          <button className="wt-icon-btn" aria-label={isWeek ? "Previous week" : "Previous month"} onClick={() => calendar.current?.getApi().prev()}><Chevron dir="left" /></button>
+          <button className="wt-chip" onClick={() => calendar.current?.getApi().today()}>Today (T)</button>
+          <button className="wt-icon-btn" aria-label={isWeek ? "Next week" : "Next month"} onClick={() => calendar.current?.getApi().next()}><Chevron dir="right" /></button>
+          <h1 className="wt-toolbar-title">{title}</h1>
+        </div>
+        <div className="wt-toolbar-group">
+          <div role="group" aria-label="View" className="wt-menu">
+            <button className="wt-chip" aria-pressed={isWeek} onClick={() => showView(true)}>Week (W)</button>
+            <button className="wt-chip" aria-pressed={!isWeek} onClick={() => showView(false)}>Month (M)</button>
+          </div>
+          <button className="wt-chip" onClick={() => setExporting(true)}>Export …</button>
+          <span className="wt-menu-anchor">
+            <button className="wt-plus" aria-label="New" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
+            {menu && (
+              <div className="wt-popmenu wt-plus-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setMenu(false)}>
+                <button className="wt-chip" role="menuitem" autoFocus onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>
+                <button className="wt-chip" role="menuitem" onClick={openMeeting}>Meeting (M)</button>
+                <button className="wt-chip" role="menuitem" onClick={() => openAbsence()}>Absence (A)</button>
+                <button className="wt-chip" role="menuitem" disabled={!categories.length} title={categories.length ? "" : "Add a Category in Settings first."} onClick={openImport}>Import .ics … (I)</button>
+              </div>
+            )}
+          </span>
+          <button className="wt-icon-btn" aria-label="Settings" title={`Settings (${/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)`} onClick={onSettings}><Gear /></button>
+          {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
+        </div>
+      </header>
       {pickedMeeting && (
         <>
           <button className="wt-chip" onClick={() => editMeeting(pickedMeeting)}>Edit Meeting</button>
@@ -347,7 +394,6 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       {pickedAbsence && <button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button>}
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
       {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={() => (setImporting(false), load())} />}
-      {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
       {short && (
         <div className="wt-notice is-warning wt-notice-row" role="status">
@@ -430,7 +476,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         slotHeaderInterval="01:00"
         slotHeaderFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
         slotLaneClass={(i) => i.isMinor && "wt-slot-half"}
-        headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridWeek,dayGridMonth" }}
+        headerToolbar={false}
         firstDay={1}
         nowIndicator
         height="auto"
@@ -481,6 +527,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         datesSet={(i) => {
           const week = i.view.type === "timeGridWeek";
           setIsWeek(week);
+          setMonthStart(secs(i.view.currentStart));
           setRange(week ? [secs(i.view.currentStart), secs(i.view.currentEnd)] : [secs(i.start), secs(i.end)]); // a hidden day must still load its items
         }}
         events={[
@@ -652,4 +699,21 @@ function LocationIcon({ location }: { location: string }) {
 
 function ShortIcon() {
   return <svg {...icon} width={12} height={12} aria-label="Short day"><path d="M8 2.5 14 13H2z" /><path d="M8 6.5v3" /><path d="M8 11.2v.1" /></svg>;
+}
+
+function Chevron({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={dir === "left" ? "M10 3 5 8l5 5" : "M6 3l5 5-5 5"} />
+    </svg>
+  );
+}
+
+function Gear() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+    </svg>
+  );
 }
