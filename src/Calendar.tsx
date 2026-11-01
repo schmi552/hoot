@@ -8,17 +8,18 @@ import timeGridPlugin from "@fullcalendar/react/timegrid";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, Ymd, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextCheckIn, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, popupSpans, resizedEnd, settingsOn, SettingsRow, Span, STEP, Ymd, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
-import { daysIn, entryText, gridRange, hiddenDays } from "./schedule/week";
+import { DayTotal, daysIn, entryText, gridRange, hiddenDays, shortDay, weekShares } from "./schedule/week";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, sourceText } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ImportDialog } from "./Import";
 import { localInput, MeetingAsk, MeetingDialog } from "./MeetingDialog";
+import { Hoot } from "./Hoot";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
@@ -62,6 +63,9 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [locMenu, setLocMenu] = useState(""); // the date key of the day whose location menu is open
+  const [dismissed, setDismissed] = useState<Record<string, number>>({}); // date key -> minutes logged when the short-day notice was dismissed; lost on quit
+  const [showMascot, setShowMascot] = useState(true);
   const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
   const clipboard = useRef<Entry | null>(null);
 
@@ -87,6 +91,13 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   }, [range, reload]);
   useEffect(() => void invoke<SettingsRow<Settings>[]>("list_settings_history").then(setRows), [settings]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
+  useEffect(() => void invoke<{ showMascot: boolean }>("get_appearance").then((a) => setShowMascot(a.showMascot)), []);
+  useEffect(() => {
+    if (!locMenu) return;
+    const close = () => setLocMenu("");
+    window.addEventListener("click", close); // the badge stops its own click, so only other clicks close the menu
+    return () => window.removeEventListener("click", close);
+  }, [locMenu]);
   useEffect(() => void invoke<MeetingSeries[]>("list_meetings").then(setSeries), [reload]);
   useEffect(() => void invoke<MeetingException[]>("list_meeting_exceptions").then(setExceptions), [reload]);
   useEffect(() => void invoke<Absence[]>("list_absences").then(setAbsences), [reload]);
@@ -272,6 +283,25 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
   const where = (d: Date) => ({ home: "Home", office: "Office" })[locations[dateKey(dayOf(d))]] ?? "";
   const daySub = (d: Date) => `${formatHM(logged(d))} / ${formatHM(expected(d))}${where(d) && ` · ${where(d)}`}`;
+  const setLocation = (key: string, location: string) => {
+    setLocMenu("");
+    invoke("set_workday_location", { date: key, location }).then(load, fail);
+  };
+  const days = range && isWeek ? daysIn(settings.tz, range[0], range[1]) : [];
+  const todayKey = dateKey(ymdIn(settings.tz, Date.now() / 1000));
+  const dayTotals: DayTotal[] = days.map((day) => {
+    const [from, to] = dayBoundsIn(settings.tz, day);
+    return { key: dateKey(day), logged: loggedMinutes(entries, from, to), expected: expectedOn(settingsAt(day), day, away), gap: popupSpans(settingsAt(day), from, to - 1, [...entries, ...meetings, ...away])[0] ?? null };
+  });
+  const short = dayTotals.some((d) => d.key === todayKey) ? shortDay(dayTotals, todayKey, dismissed) : null; // only the current week warns
+  const shortName = short && new Date(`${short.key}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const weekTotal = entries.reduce((sum, e) => sum + (e.endUtc - e.startUtc) / 60, 0);
+  const weekExpected = dayTotals.reduce((sum, d) => sum + d.expected, 0);
+  const empty = isWeek && !!range && !entries.length;
+  const next = useMemo(() => {
+    const now = Date.now() / 1000;
+    return empty ? nextCheckIn(settings, now, [], [...expandMeetings(series, exceptions, now, now + 8 * DAY), ...away]) : null;
+  }, [empty, settings, series, exceptions, absences]); // eslint-disable-line react-hooks/exhaustive-deps
   const name = (id: number | null) => categories.find((c) => c.id === id)?.name ?? "";
   const catClass = (id: number | null) => `wt-cat-${categories.find((c) => c.id === id)?.color ?? "none"}`; // no Category, or an unknown one: gray
 
@@ -304,6 +334,18 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={() => (setImporting(false), load())} />}
       {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
       <p className="wt-error" role="alert">{notice}</p>
+      {short && (
+        <div className="wt-notice is-warning wt-notice-row" role="status">
+          <span>
+            {shortName}: {formatHM(short.logged)} of {formatHM(short.expected)} logged.
+            {short.gap && ` ${clock(short.gap.startUtc)}–${clock(short.gap.endUtc)} has no Entry.`}
+          </span>
+          <span className="wt-menu">
+            {short.gap && <button className="wt-chip" onClick={() => open({ start: new Date(short.gap!.startUtc * 1000), end: new Date(short.gap!.endUtc * 1000) })}>Add Entry</button>}
+            <button className="wt-chip" onClick={() => setDismissed({ ...dismissed, [short.key]: short.logged })}>Dismiss</button>
+          </span>
+        </div>
+      )}
       {slot && (
         <form
           className="wt-form wt-editor"
@@ -359,6 +401,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
         </form>
       )}
+      <div className={isWeek ? "wt-week" : undefined}>
+      <div className="wt-week-grid">
       <FullCalendar
         ref={calendar}
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, classicTheme]}
@@ -397,7 +441,12 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         eventResize={(i) => {
           i.revert();
           const e = entries.find((x) => x.id === Number(i.event.id))!;
-          place(e, e.startUtc, resizedEnd(entries, e.id, secs(i.event.end!)));
+          place(e, e.startUtc, secs(i.event.end!)); // an overlap is refused, like a move
+        }}
+        columnEventClass={(i) => {
+          const entry = i.event.extendedProps.entry as Entry | undefined;
+          const over = i.isMirror && entry && overlapsAny(entries, { startUtc: secs(i.event.start!), endUtc: secs(i.event.end!) }, entry.id);
+          return [i.isMirror && "wt-preview", over && "is-overlap", i.isDragging && !i.isMirror && "wt-drag-source"].filter(Boolean).join(" ");
         }}
         selectMinDistance={5}
         dateClick={(i) => {
@@ -459,6 +508,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
               <div className={t.compact ? "wt-entry-text is-compact" : "wt-entry-text"}>
                 <b>{t.title}</b>
                 {t.meta && <span>{t.meta}</span>}
+                {i.isMirror && overlapsAny(entries, { startUtc: start, endUtc: end }, entry.id) && <span className="wt-overlaps">Overlaps</span>}
                 {entry.id === selected && <span className="wt-grip" />}
               </div>
             );
@@ -477,12 +527,31 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           }
           return <span className="wt-absence-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
         }}
-        dayHeaderContent={(i) => (
-          <>
-            <div>{i.text}</div>
-            <div className="wt-sub">{daySub(i.date)}</div>
-          </>
-        )}
+        dayHeaderContent={(i) => {
+          if (i.view.type !== "timeGridWeek") return <><div>{i.text}</div><div className="wt-sub">{daySub(i.date)}</div></>;
+          const day = dayOf(i.date);
+          const key = dateKey(day);
+          return (
+            <>
+              <div>{i.text}</div>
+              <div className="wt-day-meta">
+                {isWorkday(settingsAt(day).workdays, day) && (
+                  <span className="wt-menu-anchor">
+                    <button className="wt-badge" aria-haspopup="menu" aria-expanded={locMenu === key} onClick={(e) => (e.stopPropagation(), setLocMenu(locMenu === key ? "" : key))}>{where(i.date) || "Location"}</button>
+                    {locMenu === key && (
+                      <div className="wt-popmenu" role="menu" onKeyDown={(e) => e.key === "Escape" && setLocMenu("")}>
+                        {(["home", "office"] as const).map((l) => (
+                          <button key={l} role="menuitemradio" aria-checked={locations[key] === l} className="wt-chip" autoFocus={l === (locations[key] ?? "home")} onClick={() => setLocation(key, l)}>{l === "home" ? "Home" : "Office"}</button>
+                        ))}
+                      </div>
+                    )}
+                  </span>
+                )}
+                <span className="wt-sub">{formatHM(logged(i.date))} / {formatHM(expected(i.date))}</span>
+              </div>
+            </>
+          );
+        }}
         dayCellTopContent={(i) => (
           <>
             <div>{i.text}</div>
@@ -492,6 +561,28 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         dayCellClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}
         dayHeaderClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}
       />
+      {empty && (
+        <div className="wt-empty" aria-live="polite">
+          <Hoot px={5} show={showMascot} />
+          <b className="wt-empty-title">Nothing logged this week</b>
+          <p>Drag in the grid to add an Entry.{next ? ` The next check-in is at ${clock(next)}.` : ""}</p>
+        </div>
+      )}
+      </div>
+      {isWeek && (
+        <aside className="wt-side" aria-label="Week summary">
+          <span className="wt-sub">This week</span>
+          <b className="wt-total">{formatHM(weekTotal)}</b>
+          <span className="wt-sub">of {formatHM(weekExpected)} expected</span>
+          {weekShares(entries).map((s) => (
+            <div key={s.categoryId} className={`wt-share ${catClass(s.categoryId)}`}>
+              <span className="wt-share-row"><span className="wt-dot" /><span>{name(s.categoryId)}</span><span className="wt-sub">{formatHM(s.minutes)}</span></span>
+              <span className="wt-bar"><span style={{ width: `${(s.minutes / weekTotal) * 100}%` }} /></span>
+            </div>
+          ))}
+        </aside>
+      )}
+      </div>
     </main>
   );
 }

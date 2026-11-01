@@ -47,3 +47,22 @@ export function gridRange(workStart: string, workEnd: string, tz: string, timed:
 export function entryText(minutes: number, title: string, meta: string): { compact: boolean; title: string; meta: string | null } {
   return { compact: minutes <= 15, title, meta: minutes >= 45 ? meta : null };
 }
+
+/** A past Workday with less logged than expected. `gap` is its first unlogged time in work hours. `key` is the date key. */
+export type DayTotal = { key: string; logged: number; expected: number; gap: Span | null };
+
+/**
+ * The day the short-day notice is about: the latest past day in `days` (ascending) that has less logged than expected.
+ * Today and later never count. `dismissed` maps a date key to the logged minutes when the user dismissed it, so the notice stays away until more is logged.
+ */
+export function shortDay(days: DayTotal[], todayKey: string, dismissed: Record<string, number>): DayTotal | null {
+  const day = days.filter((d) => d.key < todayKey && d.logged < d.expected).at(-1);
+  return day && !(day.key in dismissed && day.logged <= dismissed[day.key]) ? day : null;
+}
+
+/** Minutes per Category over `entries`, largest first. */
+export function weekShares(entries: (Span & { categoryId: number })[]): { categoryId: number; minutes: number }[] {
+  const sums = new Map<number, number>();
+  for (const e of entries) sums.set(e.categoryId, (sums.get(e.categoryId) ?? 0) + (e.endUtc - e.startUtc) / 60);
+  return [...sums].map(([categoryId, minutes]) => ({ categoryId, minutes })).sort((a, b) => b.minutes - a.minutes);
+}

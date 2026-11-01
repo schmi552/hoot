@@ -193,3 +193,20 @@ export function recentEntries<T extends Span & { categoryId: number; description
     .filter((e) => !seen.has(`${e.categoryId}|${e.description}`) && seen.add(`${e.categoryId}|${e.description}`))
     .slice(0, n);
 }
+
+/**
+ * The next minute a popup is due, or null if none is due in the next 8 days.
+ * It ignores Entries that end after `nowUtc`.
+ * It cannot know when the user last answered or skipped a popup: only the popup window knows that.
+ */
+export function nextCheckIn(s: WorkHours, nowUtc: number, entries: Span[] = [], busy: Span[] = []): number | null {
+  const first = Math.floor(nowUtc / 60) * 60 + 60;
+  const past = entries.filter((e) => e.endUtc <= nowUtc);
+  for (let n = 0; n < 8; n++) {
+    const day = ymdIn(s.tz, first + n * 86_400);
+    if (!isWorkday(s.workdays, day)) continue;
+    const [from, to] = dayBoundsIn(s.tz, day);
+    for (let t = Math.max(first, from); t < to; t += 60) if (popupDue(s, t, past, 0, busy)) return t;
+  }
+  return null;
+}

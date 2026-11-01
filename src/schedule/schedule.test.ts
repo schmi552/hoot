@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { absenceSpans } from "./absences";
-import { expectedOn, dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, settingsOn, splitGap, recentEntries, resizedEnd } from "./schedule";
+import { nextCheckIn, expectedOn, dayBoundsIn, expectedMinutes, instantAt, weekday, ymdIn, formatHM, loggedMinutes, minutesBetween, nextFreeStart, nextFreeSlot, overlapsAny, gapDue, popupDue, popupSpans, settingsOn, splitGap, recentEntries, resizedEnd } from "./schedule";
 
 test("minutesBetween counts minutes between two epoch-second instants", () => {
   expect(minutesBetween(1_000, 1_000 + 90 * 60)).toBe(90);
@@ -221,4 +221,22 @@ test("expected time is zero on a day that is not a Workday and uses the Workdays
   expect(expected({ y: 2026, m: 11, d: 6 })).toBe(0); // the first new Friday
   expect(expected({ y: 2026, m: 10, d: 31 })).toBe(0); // a Saturday
   expect(settingsOn(history, { y: 2026, m: 9, d: 1 }).effectiveFrom).toBe("2026-10-01"); // before the first row
+});
+
+test("the next check-in is one interval after the work start, or after the last Entry", () => {
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30, workdays: "12345" };
+  const at = (d: number, h: number, m = 0) => instantAt(s.tz, { y: 2026, m: 10, d }, h * 60 + m);
+  expect(nextCheckIn(s, at(27, 8))).toBe(at(27, 9, 30));
+  expect(nextCheckIn(s, at(27, 9, 55), [{ startUtc: at(27, 9, 10), endUtc: at(27, 9, 50) }])).toBe(at(27, 10, 20));
+});
+
+test("the next check-in after work, or on a weekend, is on the next Workday", () => {
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30, workdays: "12345" };
+  const at = (m: number, d: number, h: number, min = 0) => instantAt(s.tz, { y: 2026, m, d }, h * 60 + min);
+  expect(nextCheckIn(s, at(10, 30, 18))).toBe(at(11, 2, 9, 30)); // Friday evening, so Monday
+});
+
+test("there is no next check-in when no day is a Workday", () => {
+  const s = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "Europe/Berlin", intervalMinutes: 30, workdays: "" };
+  expect(nextCheckIn(s, 1_800_000_000)).toBeNull();
 });

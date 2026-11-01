@@ -361,6 +361,11 @@
   --hour-gutter-width: 56px;
   --sidebar-width: 260px;
   --sidebar-narrow-width: 240px;
+  --text-total: 22px;
+  --dot-size: 10px;
+  --bar-height: 6px;
+  --badge-height: 22px;
+  --empty-text-width: 360px;
 
   /* ADDED: sizes that components.css used as literals */
   --border-width: 1px;

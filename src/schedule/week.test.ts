@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { instantAt, isWorkday, Ymd } from "./schedule";
-import { daysIn, entryText, gridRange, hiddenDays } from "./week";
+import { daysIn, entryText, gridRange, hiddenDays, shortDay, weekShares } from "./week";
 
 const tz = "Europe/Zurich";
 const at = (d: number, h: number, m = 0) => instantAt(tz, { y: 2026, m: 10, d }, h * 60 + m);
@@ -52,4 +52,43 @@ test("an Entry shows one line at 15 minutes, the title at 30, and title plus cod
   expect(entryText(20, "Fix", "m").meta).toBeNull();
   expect(entryText(44, "Fix", "m").meta).toBeNull();
   expect(entryText(120, "Fix", "m").meta).toBe("m");
+});
+
+const row = (d: number, logged: number, expected: number, gap: { startUtc: number; endUtc: number } | null = null) => ({ key: `2026-10-${d}`, logged, expected, gap });
+const thu = "2026-10-29";
+
+test("the short-day notice is for the latest short past Workday", () => {
+  const gap = { startUtc: at(27, 10), endUtc: at(27, 11) };
+  const rows = [row(26, 400, 480, { startUtc: at(26, 9), endUtc: at(26, 10) }), row(27, 420, 480, gap), row(28, 480, 480)];
+  expect(shortDay(rows, thu, {})).toEqual(rows[1]);
+});
+
+test("the short-day notice uses the first unlogged gap of the day as its range", () => {
+  const gap = { startUtc: at(27, 10), endUtc: at(27, 11) };
+  expect(shortDay([row(27, 420, 480, gap)], thu, {})?.gap).toEqual(gap);
+});
+
+test("today and the future never warn", () => {
+  expect(shortDay([row(29, 0, 480), row(30, 0, 480)], thu, {})).toBeNull();
+});
+
+test("a day with no expected time never warns", () => {
+  expect(shortDay([row(31, 0, 0)], "2026-11-02", {})).toBeNull();
+});
+
+test("a dismissed day stays quiet until the user logs more", () => {
+  const rows = [row(27, 420, 480)];
+  expect(shortDay(rows, thu, { "2026-10-27": 420 })).toBeNull();
+  expect(shortDay([row(27, 450, 480)], thu, { "2026-10-27": 420 })).not.toBeNull();
+});
+
+test("a dismissed latest day hides the notice and does not fall back to an earlier day", () => {
+  const rows = [row(26, 400, 480), row(27, 420, 480)];
+  expect(shortDay(rows, thu, { "2026-10-27": 420 })).toBeNull();
+});
+
+test("the week shares count minutes per Category, largest first", () => {
+  const e = (categoryId: number, from: number, to: number) => ({ categoryId, startUtc: at(26, from), endUtc: at(26, to) });
+  expect(weekShares([e(1, 9, 10), e(2, 10, 13), e(1, 13, 14)])).toEqual([{ categoryId: 2, minutes: 180 }, { categoryId: 1, minutes: 120 }]);
+  expect(weekShares([])).toEqual([]);
 });
