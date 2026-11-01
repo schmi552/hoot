@@ -1,0 +1,8 @@
+/* Imported after theme.css, like components.css in the app. */
+.wt-calendar .spike-evt { background: rgb(1, 2, 3); }
+.spike-child { visibility: visible; height: 100%; background: #09c; }
+.spike-source .spike-child, .spike-source { opacity: 0.4; }
+.spike-cell { min-height: 148px !important; }
+.spike-portal { height: 10px; background: #c60; }
+#week { width: 900px; } #month { width: 900px; }
+.spike-single { background: rgb(4, 5, 6); }
