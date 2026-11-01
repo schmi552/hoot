@@ -66,3 +66,23 @@ export function weekShares(entries: (Span & { categoryId: number })[]): { catego
   for (const e of entries) sums.set(e.categoryId, (sums.get(e.categoryId) ?? 0) + (e.endUtc - e.startUtc) / 60);
   return [...sums].map(([categoryId, minutes]) => ({ categoryId, minutes })).sort((a, b) => b.minutes - a.minutes);
 }
+
+/** The logged and expected minutes of one day. */
+export type DayMinutes = { logged: number; expected: number };
+
+/** The numbers of the month Week column for one row. All days count for the total. A non-workday expects 0, so the expected time is the sum over the Workdays. */
+export function rowTotals(days: DayMinutes[]): DayMinutes {
+  return { logged: days.reduce((s, d) => s + d.logged, 0), expected: days.reduce((s, d) => s + d.expected, 0) };
+}
+
+/** Whether a month cell shows its total and bar: a day with Entries, or a day that expects work and is not in the future. A weekend day with no Entry stays quiet. */
+export function showsDayTotal(day: DayMinutes, future: boolean): boolean {
+  return day.logged > 0 || (day.expected > 0 && !future);
+}
+
+/** The bar segments of a day: each Category's share of the logged time, in percent, largest first. */
+export function barSegments(entries: (Span & { categoryId: number })[]): { categoryId: number; percent: number }[] {
+  const shares = weekShares(entries);
+  const total = shares.reduce((s, x) => s + x.minutes, 0) || 1;
+  return shares.map((s) => ({ categoryId: s.categoryId, percent: (s.minutes / total) * 100 }));
+}

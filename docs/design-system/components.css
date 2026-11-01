@@ -391,3 +391,24 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-list-row { all: unset; box-sizing: border-box; width: 100%; display: flex; justify-content: space-between; gap: var(--space-md); align-items: center; min-height: var(--input-height); border-bottom: var(--border-width) solid var(--color-border); cursor: pointer; }
 .wt-list-row:hover { background: var(--color-surface-sunken); }
 .wt-list-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ---------- Month view ---------- */
+.wt-month { display: flex; align-items: flex-start; }
+.wt-month .wt-week-grid { flex: 1; min-width: 0; }
+.wt-calendar .wt-month-cell { min-height: var(--month-row-height) !important; /* the theme sets min-height 0 with !important */ box-sizing: border-box; padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xs); }
+.wt-calendar .wt-month-off { background: var(--calendar-offhours-bg); }
+.wt-month-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
+.wt-month-num { display: inline-flex; align-items: center; justify-content: center; min-width: var(--month-today-size); height: var(--month-today-size); border-radius: 50%; font-size: var(--text-body); font-weight: 600; color: var(--calendar-fg); }
+.wt-month-num.is-other { color: var(--calendar-fg-muted); }
+.wt-month-num.is-today { background: var(--calendar-accent); color: var(--calendar-on-accent); }
+.wt-month-loc { display: inline-flex; color: var(--calendar-fg-muted); }
+.wt-calendar .wt-month-bottom { margin-top: auto; }
+.wt-month-total { display: flex; flex-direction: column; gap: var(--space-xs); font: var(--text-caption) var(--font-mono); color: var(--calendar-fg-muted); }
+.wt-month-total .is-short { display: inline-flex; align-items: center; gap: var(--space-xs); font-weight: 600; color: var(--calendar-warning); }
+.wt-month-bar { display: flex; gap: 1px; height: var(--bar-height); border-radius: var(--bar-height); overflow: hidden; background: var(--color-border); }
+.wt-month-bar > span { background: var(--cat-solid); }
+/* The Week column sits beside the grid. Its head and rows line up with the weekday row and the cell rows of FullCalendar. */
+.wt-weekcol { flex: none; width: var(--month-week-width); border-left: var(--border-width) solid var(--calendar-border); background: var(--color-surface-sunken); }
+.wt-weekcol-head { box-sizing: border-box; height: var(--month-head-height); padding: var(--space-sm); font-size: var(--text-caption); color: var(--calendar-fg-muted); border-bottom: var(--border-width) solid var(--calendar-border); }
+.wt-weekcol-row { box-sizing: border-box; height: calc(var(--month-row-height) + var(--border-width)); padding: var(--space-sm); display: flex; flex-direction: column; justify-content: flex-end; border-bottom: var(--border-width) solid var(--calendar-border); font-family: var(--font-mono); }
+.wt-weekcol-row span { font-size: var(--text-caption); color: var(--calendar-fg-muted); }

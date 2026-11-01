@@ -8,13 +8,14 @@ import timeGridPlugin from "@fullcalendar/react/timegrid";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 import {
   dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextCheckIn, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, popupSpans, resizedEnd, settingsOn, SettingsRow, Span, STEP, Ymd, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
-import { DayTotal, daysIn, entryText, gridRange, hiddenDays, shortDay, weekShares } from "./schedule/week";
+import { barSegments, DayTotal, daysIn, entryText, gridRange, hiddenDays, rowTotals, shortDay, showsDayTotal, weekShares } from "./schedule/week";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, sourceText } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ImportDialog } from "./Import";
@@ -66,6 +67,9 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [locMenu, setLocMenu] = useState(""); // the date key of the day whose location menu is open
   const [dismissed, setDismissed] = useState<Record<string, number>>({}); // date key -> minutes logged when the short-day notice was dismissed; lost on quit
   const [showMascot, setShowMascot] = useState(true);
+  const [cells, setCells] = useState<Record<string, HTMLElement>>({}); // date key -> the bottom div of a month cell, where our total and bar go
+  const monthEl = useRef<HTMLDivElement>(null);
+  const [weekColTop, setWeekColTop] = useState(0); // where the Week column starts, so its head lines up with the weekday row
   const history = useRef<{ stack: Change[]; at: number }>({ stack: [], at: 0 }); // lost on quit
   const clipboard = useRef<Entry | null>(null);
 
@@ -297,6 +301,17 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const shortName = short && new Date(`${short.key}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   const weekTotal = entries.reduce((sum, e) => sum + (e.endUtc - e.startUtc) / 60, 0);
   const weekExpected = dayTotals.reduce((sum, d) => sum + d.expected, 0);
+  // Month view: the totals of every day on the grid, in rows of seven.
+  const monthDays = range && !isWeek ? daysIn(settings.tz, range[0], range[1]) : [];
+  const monthStats = new Map(monthDays.map((day) => {
+    const [from, to] = dayBoundsIn(settings.tz, day);
+    return [dateKey(day), { logged: loggedMinutes(entries, from, to), expected: expectedOn(settingsAt(day), day, away), entries: entries.filter((e) => e.startUtc < to && e.endUtc > from) }];
+  }));
+  const monthRows = Array.from({ length: monthDays.length / 7 }, (_, r) => rowTotals(monthDays.slice(r * 7, r * 7 + 7).map((d) => monthStats.get(dateKey(d))!)));
+  useLayoutEffect(() => {
+    const cell = monthEl.current?.querySelector(".wt-month-cell");
+    if (cell) setWeekColTop(cell.getBoundingClientRect().top - monthEl.current!.getBoundingClientRect().top - 26); // 26 is --month-head-height
+  }); // after every render: the toolbar and the grid can move without a change of ours
   const empty = isWeek && !!range && !entries.length;
   const next = useMemo(() => {
     const now = Date.now() / 1000;
@@ -401,7 +416,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
         </form>
       )}
-      <div className={isWeek ? "wt-week" : undefined}>
+      <div ref={monthEl} className={isWeek ? "wt-week" : "wt-month"}>
       <div className="wt-week-grid">
       <FullCalendar
         ref={calendar}
@@ -469,7 +484,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           setRange(week ? [secs(i.view.currentStart), secs(i.view.currentEnd)] : [secs(i.start), secs(i.end)]); // a hidden day must still load its items
         }}
         events={[
-          ...entries.map((e) => ({
+          ...(isWeek ? entries : []).map((e) => ({
             id: String(e.id),
             title: `${name(e.categoryId)}: ${e.description}`,
             start: new Date(e.startUtc * 1000),
@@ -477,7 +492,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             className: `wt-entry ${catClass(e.categoryId)}${e.id === selected ? " wt-selected" : ""}`,
             extendedProps: { entry: e },
           })),
-          ...meetings.map((m) => ({
+          ...(isWeek ? meetings : []).map((m) => ({
             id: `m${m.seriesId}-${m.startUtc}`,
             title: m.categoryId === null ? m.title : `${name(m.categoryId)}: ${m.title}`,
             start: new Date(m.startUtc * 1000),
@@ -497,7 +512,6 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}
         eventContent={(i) => {
-          if (i.view.type !== "timeGridWeek") return true; // the month view keeps its default text until ticket 21
           const { entry, meeting, absence, repeats } = i.event.extendedProps as { entry?: Entry; meeting?: MeetingOccurrence; absence?: Absence; repeats?: boolean };
           const [start, end] = [secs(i.event.start!), secs(i.event.end!)]; // during a drag these are the new times
           const time = `${clock(start)}–${clock(end)}`;
@@ -528,7 +542,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           return <span className="wt-absence-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
         }}
         dayHeaderContent={(i) => {
-          if (i.view.type !== "timeGridWeek") return <><div>{i.text}</div><div className="wt-sub">{daySub(i.date)}</div></>;
+          if (i.view.type !== "timeGridWeek") return <div>{i.text}</div>;
           const day = dayOf(i.date);
           const key = dateKey(day);
           return (
@@ -552,14 +566,25 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             </>
           );
         }}
-        dayCellTopContent={(i) => (
-          <>
-            <div>{i.text}</div>
-            <div className="wt-sub">{daySub(i.date)}</div>
-          </>
-        )}
-        dayCellClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}
-        dayHeaderClass={(i) => logged(i.date) < expected(i.date) && "wt-day-short"}
+        dayCellTopContent={(i) => {
+          const day = dayOf(i.date);
+          const place = locations[dateKey(day)];
+          return (
+            <div className="wt-month-top">
+              <span className={i.isToday ? "wt-month-num is-today" : i.isOther ? "wt-month-num is-other" : "wt-month-num"}>{day.d}</span>
+              {place && <LocationIcon location={place} />}
+            </div>
+          );
+        }}
+        dayCellClass={(i) => (i.view.type === "dayGridMonth" ? `wt-month-cell${isWorkday(settingsAt(dayOf(i.date)).workdays, dayOf(i.date)) ? "" : " wt-month-off"}` : logged(i.date) < expected(i.date) && "wt-day-short")}
+        dayCellBottomClass="wt-month-bottom"
+        dayCellDidMount={(i) => {
+          if (i.view.type !== "dayGridMonth") return;
+          const key = dateKey(dayOf(i.date));
+          setCells((c) => ({ ...c, [key]: i.el.querySelector<HTMLElement>(".wt-month-bottom")! })); // the portal target is the bottom div of the cell
+        }}
+        dayCellWillUnmount={(i) => setCells(({ [dateKey(dayOf(i.date))]: _, ...c }) => c)}
+        dayHeaderClass={(i) => i.view.type === "timeGridWeek" && logged(i.date) < expected(i.date) && "wt-day-short"}
       />
       {empty && (
         <div className="wt-empty" aria-live="polite">
@@ -569,6 +594,17 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         </div>
       )}
       </div>
+      {!isWeek && (
+        <div className="wt-weekcol" aria-label="Week totals" style={{ marginTop: weekColTop }}>
+          <div className="wt-weekcol-head">Week</div>
+          {monthRows.map((r, n) => (
+            <div key={n} className="wt-weekcol-row">
+              <b>{formatHM(r.logged)}</b>
+              <span>of {formatHM(r.expected)}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {isWeek && (
         <aside className="wt-side" aria-label="Week summary">
           <span className="wt-sub">This week</span>
@@ -583,6 +619,37 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         </aside>
       )}
       </div>
+      {Object.entries(cells).map(([key, el]) => {
+        const stat = monthStats.get(key);
+        if (!stat || isWeek || !showsDayTotal(stat, key > todayKey)) return null;
+        const short = key <= todayKey && stat.logged < stat.expected;
+        return createPortal(
+          <div className="wt-month-total">
+            <span className={short ? "is-short" : undefined}>{short && <ShortIcon />}{formatHM(stat.logged)}</span>
+            <span className="wt-month-bar">{barSegments(stat.entries).map((s) => <span key={s.categoryId} className={catClass(s.categoryId)} style={{ width: `${s.percent}%` }} />)}</span>
+          </div>,
+          el,
+          key,
+        );
+      })}
     </main>
   );
+}
+
+const icon = { width: 14, height: 14, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", role: "img" } as const;
+
+/** The read-only location mark in a month cell. */
+function LocationIcon({ location }: { location: string }) {
+  const home = location === "home";
+  return (
+    <span className="wt-month-loc" title={home ? "Home" : "Office"}>
+      <svg {...icon} aria-label={home ? "Home" : "Office"}>
+        {home ? <><path d="M2.5 7.5 8 3l5.5 4.5" /><path d="M4 6.5V13h8V6.5" /><path d="M6.5 13V9.5h3V13" /></> : <><rect x="3.5" y="2.5" width="9" height="11" rx="1" /><path d="M6 5.5h1M9 5.5h1M6 8h1M9 8h1M7 13.5V11h2v2.5" /></>}
+      </svg>
+    </span>
+  );
+}
+
+function ShortIcon() {
+  return <svg {...icon} width={12} height={12} aria-label="Short day"><path d="M8 2.5 14 13H2z" /><path d="M8 6.5v3" /><path d="M8 11.2v.1" /></svg>;
 }

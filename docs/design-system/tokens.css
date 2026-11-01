@@ -358,6 +358,9 @@
   --dialog-wide-width: 440px;
   --menu-width: 240px;
   --month-week-width: 104px;
+  --month-row-height: 148px;
+  --month-head-height: 26px; /* the weekday row of FullCalendar; check against the grid */
+  --month-today-size: 26px;
   --hour-gutter-width: 56px;
   --sidebar-width: 260px;
   --sidebar-narrow-width: 240px;

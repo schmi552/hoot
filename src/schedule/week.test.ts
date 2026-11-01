@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { instantAt, isWorkday, Ymd } from "./schedule";
-import { daysIn, entryText, gridRange, hiddenDays, shortDay, weekShares } from "./week";
+import { barSegments, daysIn, entryText, gridRange, hiddenDays, rowTotals, shortDay, showsDayTotal, weekShares } from "./week";
 
 const tz = "Europe/Zurich";
 const at = (d: number, h: number, m = 0) => instantAt(tz, { y: 2026, m: 10, d }, h * 60 + m);
@@ -91,4 +91,21 @@ test("the week shares count minutes per Category, largest first", () => {
   const e = (categoryId: number, from: number, to: number) => ({ categoryId, startUtc: at(26, from), endUtc: at(26, to) });
   expect(weekShares([e(1, 9, 10), e(2, 10, 13), e(1, 13, 14)])).toEqual([{ categoryId: 2, minutes: 180 }, { categoryId: 1, minutes: 120 }]);
   expect(weekShares([])).toEqual([]);
+});
+
+test("the week total counts all seven days and the expected time only the Workdays", () => {
+  const row = [8 * 60, 8 * 60, 0, 8 * 60, 8 * 60, 90, 0].map((logged, i) => ({ logged, expected: i < 5 ? 8 * 60 : 0 })); // Wed is a day off with 0 expected; Sat has 90 minutes
+  expect(rowTotals(row)).toEqual({ logged: 32 * 60 + 90, expected: 5 * 8 * 60 });
+});
+
+test("a weekend day shows a total and bar only when it has Entries", () => {
+  expect(showsDayTotal({ logged: 0, expected: 0 }, false)).toBe(false);
+  expect(showsDayTotal({ logged: 90, expected: 0 }, false)).toBe(true);
+  expect(showsDayTotal({ logged: 0, expected: 480 }, false)).toBe(true); // a past or current Workday with nothing logged is a short day
+  expect(showsDayTotal({ logged: 0, expected: 480 }, true)).toBe(false); // a future Workday is quiet
+});
+
+test("the bar splits the day by Category", () => {
+  const e = (categoryId: number, from: number, to: number) => ({ categoryId, startUtc: at(26, from), endUtc: at(26, to) });
+  expect(barSegments([e(1, 8, 9), e(2, 9, 12)])).toEqual([{ categoryId: 2, percent: 75 }, { categoryId: 1, percent: 25 }]);
 });
