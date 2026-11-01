@@ -567,10 +567,10 @@ fn set_app_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
     conn.execute("INSERT OR REPLACE INTO app_setting (key, value) VALUES (?1, ?2)", [key, value]).map(drop)
 }
 
-/// The theme is "system" and the mascot is on until the user changes them.
+/// The theme is "light" and the mascot is on until the user changes them.
 pub fn appearance(conn: &Connection) -> Result<Appearance> {
     Ok(Appearance {
-        theme: app_setting(conn, "theme")?.unwrap_or_else(|| "system".into()),
+        theme: app_setting(conn, "theme")?.unwrap_or_else(|| "light".into()),
         show_mascot: app_setting(conn, "show_mascot")?.is_none_or(|v| v == "true"),
     })
 }
@@ -611,10 +611,10 @@ mod tests {
     }
 
     #[test]
-    fn appearance_defaults_to_system_theme_with_mascot_and_reads_back_changes() {
+    fn appearance_defaults_to_light_theme_with_mascot_and_reads_back_changes() {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
-        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "system".into(), show_mascot: true });
+        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "light".into(), show_mascot: true });
 
         set_theme(&conn, "dark").unwrap();
         set_show_mascot(&conn, false).unwrap();
@@ -629,7 +629,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
         assert!(set_theme(&conn, "pink").is_err());
-        assert_eq!(appearance(&conn).unwrap().theme, "system");
+        assert_eq!(appearance(&conn).unwrap().theme, "light");
     }
 
     fn settings(work_start: &str) -> Settings {

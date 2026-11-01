@@ -170,7 +170,7 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
   const [categories, setCategories] = useState<Category[]>([]);
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
-  const [look, setLook] = useState<Appearance>({ theme: "system", showMascot: true });
+  const [look, setLook] = useState<Appearance>({ theme: "light", showMascot: true });
 
   const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
   useEffect(() => void refresh(), []);
