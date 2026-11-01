@@ -423,3 +423,7 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-plus { width: var(--input-height); height: var(--input-height); border-radius: 50%; border: 0; background: var(--chip-bg-on); color: var(--chip-fg-on); font: inherit; font-size: var(--text-title); line-height: 1; cursor: pointer; }
 .wt-plus-menu { left: auto; right: 0; translate: 0 var(--space-xs); min-width: 180px; }
 .wt-plus-menu .wt-chip { text-align: left; }
+
+/* A modal question: the form sits in the middle over a dimmed page. */
+.wt-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgb(0 0 0 / 0.4); }
+.wt-modal > form { margin: 0; padding: var(--space-md); background: var(--listbox-bg); border: var(--border-width) solid var(--listbox-border); border-radius: var(--listbox-radius); box-shadow: var(--listbox-shadow); }

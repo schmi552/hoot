@@ -27,6 +27,19 @@ export function ruleFor(repeat: Repeat): string | null {
   return { none: null, daily: "FREQ=DAILY", weekdays: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", weekly: "FREQ=WEEKLY", monthly: "FREQ=MONTHLY" }[repeat];
 }
 
+const DAY_NAMES: Record<string, string> = { MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat", SU: "Sun" };
+
+/** A repeat rule as text. A rule that the app cannot describe (an interval, a count, an end date …) gives "This Meeting repeats.". */
+export function repeatText(rrule: string): string {
+  const parts = Object.fromEntries(rrule.split(";").map((p) => p.split("=")));
+  const { FREQ: freq, BYDAY: byday, ...rest } = parts;
+  const days: string[] = byday?.split(",") ?? [];
+  const unit = { DAILY: "day", WEEKLY: "week", MONTHLY: "month" }[freq as string];
+  if (!unit || Object.keys(rest).length || (byday && (freq !== "WEEKLY" || days.some((d) => !DAY_NAMES[d])))) return "This Meeting repeats.";
+  if (days.join() === "MO,TU,WE,TH,FR") return "Repeats every weekday.";
+  return `Repeats every ${unit}${days.length ? ` on ${days.map((d) => DAY_NAMES[d]).join(", ")}` : ""}.`;
+}
+
 /** The occurrences that touch [fromUtc, toUtc) (epoch seconds). The wall-clock start stays the same across a DST change. */
 export function expandMeetings(all: MeetingSeries[], exceptions: MeetingException[], fromUtc: number, toUtc: number): MeetingOccurrence[] {
   const out: MeetingOccurrence[] = [];

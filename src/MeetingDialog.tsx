@@ -1,11 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { Temporal } from "temporal-polyfill";
-import { MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor } from "./schedule/meetings";
+import { MeetingOccurrence, MeetingSeries, Repeat, repeatText, REPEATS, ruleFor } from "./schedule/meetings";
+import { Category, CategoryCombo } from "./CategoryCombo";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
-type Category = { id: number; name: string };
 export type MeetingForm = { title: string; categoryId: number; source: string; start: string; duration: number; repeat: Repeat; editing?: MeetingOccurrence };
 /** What the dialog does: show a form (new or edit), or ask about a delete. */
 export type MeetingAsk = { form: MeetingForm } | { remove: MeetingOccurrence };
@@ -53,17 +53,36 @@ export function MeetingDialog({ settings, categories, series, ask, wholeSeries, 
     if ("remove" in ask) askScope({ occurrence: ask.remove });
   }, []);
 
-  if (scope)
+  if (scope) {
+    // The title names the verb: a form with a new start is a move.
+    const verb = !scope.form ? "Delete" : scope.form.start === localInput(settings.tz, scope.occurrence.startUtc) ? "Edit" : "Move";
+    const title = `${verb} Meeting`;
     return (
-      <form className="wt-form wt-editor" role="alertdialog" aria-label="Which Meetings" onKeyDown={(e) => e.key === "Escape" && onClose()} onSubmit={(e) => e.preventDefault()}>
-        <span className="wt-sub">{scope.form ? "Change" : "Delete"}:</span>
-        <button className="wt-chip is-primary" type="button" autoFocus onClick={() => change(scope, true)}>This Meeting only</button>
-        <button className="wt-chip" type="button" onClick={() => change(scope, false)}>All Meetings</button>
-        <button className="wt-chip" type="button" onClick={onClose}>Cancel</button>
-        <ErrorLine error={error} />
-      </form>
+      <div className="wt-modal">
+        <form
+          className="wt-form wt-editor"
+          role="alertdialog"
+          aria-modal="true"
+          aria-label={title}
+          onKeyDown={(e) => {
+            const k = e.key.toLowerCase();
+            if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+            if (k === "escape") onClose();
+            else if (k === "a" || k === "t") change(scope, k === "t");
+          }}
+          onSubmit={(e) => e.preventDefault()}
+        >
+          <strong>{title}</strong>
+          <button className="wt-chip is-primary" type="button" autoFocus onClick={() => change(scope, true)}>This Meeting only (T)</button>
+          <button className="wt-chip" type="button" onClick={() => change(scope, false)}>All Meetings (A)</button>
+          <button className="wt-chip" type="button" onClick={onClose}>Cancel (Esc)</button>
+          <ErrorLine error={error} />
+        </form>
+      </div>
     );
+  }
   if (!form) return null;
+  const rule = form.editing && series.find((x) => x.id === form.editing!.seriesId)?.rrule;
   return (
     <form
       className="wt-form wt-editor"
@@ -74,20 +93,18 @@ export function MeetingDialog({ settings, categories, series, ask, wholeSeries, 
       }}
     >
       <input className="wt-input" aria-label="Title" placeholder="Title" autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-      <select className="wt-input" aria-label="Category" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: Number(e.target.value) })}>
-        <option value={0}>None</option>
-        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
+      <div style={{ flex: 1 }}><CategoryCombo none options={categories} value={form.categoryId} onChange={(categoryId) => setForm({ ...form, categoryId })} /></div>
       {form.source && <p className="wt-sub">{form.source}</p>}
+      {rule && <p className="wt-sub">{repeatText(rule)}</p>}
       <input className="wt-input" type="datetime-local" aria-label="Start" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
-      <input className="wt-input" type="number" min={1} step={5} aria-label="Duration in minutes" value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} />
+      <input className="wt-input" type="number" min={5} step={5} aria-label="Duration in minutes" value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} />
       {!form.editing && (
         <select className="wt-input" aria-label="Repeat" value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value as Repeat })}>
           {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
         </select>
       )}
-      <button className="wt-chip is-primary" type="submit">Save</button>
       <button className="wt-chip" type="button" onClick={onClose}>Cancel</button>
+      <button className="wt-chip is-primary" type="submit">Save</button>
       {wholeSeries && form.editing && <button className="wt-chip" type="button" onClick={() => change({ occurrence: form.editing! }, false)}>Delete series</button>}
       <ErrorLine error={error} retry={failed ? save : undefined} />
     </form>

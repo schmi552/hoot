@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { expandMeetings, ruleFor, sourceText, type MeetingException, type MeetingSeries } from "./meetings";
+import { expandMeetings, repeatText, ruleFor, sourceText, type MeetingException, type MeetingSeries } from "./meetings";
 import { instantAt } from "./schedule";
 import { gapDue, popupDue, subtractSpans } from "./schedule";
 
@@ -97,4 +97,14 @@ test("a series says where it came from", () => {
   expect(sourceText({ sourceFile: null })).toBe("");
   expect(sourceText({ sourceFile: "" })).toBe("from .ics file");
   expect(sourceText({ sourceFile: "work.ics" })).toBe("from work.ics");
+});
+
+test("a repeat rule shows as text, and a rule the app cannot describe has a fallback", () => {
+  expect(repeatText(ruleFor("daily")!)).toBe("Repeats every day.");
+  expect(repeatText(ruleFor("weekdays")!)).toBe("Repeats every weekday.");
+  expect(repeatText(ruleFor("weekly")!)).toBe("Repeats every week.");
+  expect(repeatText(ruleFor("monthly")!)).toBe("Repeats every month.");
+  expect(repeatText("FREQ=WEEKLY;BYDAY=MO,WE")).toBe("Repeats every week on Mon, Wed.");
+  for (const rule of ["FREQ=WEEKLY;INTERVAL=2", "FREQ=DAILY;COUNT=3", "FREQ=YEARLY", "FREQ=MONTHLY;BYDAY=1MO", "FREQ=DAILY;BYDAY=MO"])
+    expect(repeatText(rule)).toBe("This Meeting repeats.");
 });

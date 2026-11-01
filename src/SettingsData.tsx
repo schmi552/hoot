@@ -137,10 +137,10 @@ export function RecurringMeetings({ settings, categories }: { settings: Settings
       </ul>
       <div className="wt-actions">
         <button type="button" className="wt-chip" onClick={add}>Add Meeting</button>
-        <button type="button" className="wt-chip" disabled={!categories.length} onClick={() => setImporting(true)}>Import .ics …</button>
+        <button type="button" className="wt-chip" onClick={() => setImporting(true)}>Import .ics …</button>
       </div>
       {ask && <MeetingDialog settings={settings} categories={categories} series={series} ask={ask} wholeSeries onClose={() => setAsk(null)} onDone={close} />}
-      {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={close} />}
+      {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={() => close()} />}
     </section>
   );
 }

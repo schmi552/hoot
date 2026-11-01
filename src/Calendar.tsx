@@ -18,8 +18,9 @@ import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from 
 import { barSegments, DayTotal, daysIn, entryText, gridRange, hiddenDays, rowTotals, shortDay, showsDayTotal, weekShares } from "./schedule/week";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, sourceText } from "./schedule/meetings";
 import { monthTitle, toolbarKey, weekTitle } from "./schedule/toolbar";
+import { CategoryCombo } from "./CategoryCombo";
 import { ExportDialog } from "./Export";
-import { ImportDialog } from "./Import";
+import { ImportDialog, PickCategoryDialog } from "./Import";
 import { localInput, MeetingAsk, MeetingDialog } from "./MeetingDialog";
 import { Hoot } from "./Hoot";
 import { ErrorLine } from "./Popup";
@@ -66,6 +67,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [uncategorized, setUncategorized] = useState<number[]>([]); // series of the last import that have no Category; the notice offers "Pick Category"
+  const [picking, setPicking] = useState(false);
   const [locMenu, setLocMenu] = useState(""); // the date key of the day whose location menu is open
   const [dismissed, setDismissed] = useState<Record<string, number>>({}); // date key -> minutes logged when the short-day notice was dismissed; lost on quit
   const [showMascot, setShowMascot] = useState(true);
@@ -238,11 +241,11 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   };
   const openImport = () => {
     setMenu(false);
-    if (categories.length) setImporting(true);
+    setImporting(true);
   };
   const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
   onKey.current = (e) => {
-    if (slot || meeting || absenceForm || exporting || importing || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    if (slot || meeting || absenceForm || exporting || importing || picking || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
     const k = e.key.toLowerCase();
     const mod = e.metaKey || e.ctrlKey;
     const keep = () => e.preventDefault();
@@ -377,7 +380,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
                 <button className="wt-chip" role="menuitem" autoFocus onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>
                 <button className="wt-chip" role="menuitem" onClick={openMeeting}>Meeting (M)</button>
                 <button className="wt-chip" role="menuitem" onClick={() => openAbsence()}>Absence (A)</button>
-                <button className="wt-chip" role="menuitem" disabled={!categories.length} title={categories.length ? "" : "Add a Category in Settings first."} onClick={openImport}>Import .ics … (I)</button>
+                <button className="wt-chip" role="menuitem" onClick={openImport}>Import .ics … (I)</button>
               </div>
             )}
           </span>
@@ -393,7 +396,17 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       )}
       {pickedAbsence && <button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button>}
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
-      {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={() => (setImporting(false), load())} />}
+      {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={(ids) => (setImporting(false), setUncategorized(ids), load())} />}
+      {picking && <PickCategoryDialog categories={categories} series={series.filter((m) => uncategorized.includes(m.id))} onClose={() => setPicking(false)} onDone={() => (setPicking(false), setUncategorized([]), load())} />}
+      {uncategorized.length > 0 && (
+        <div className="wt-notice wt-notice-row" role="status">
+          <span>{uncategorized.length} imported {uncategorized.length === 1 ? "Meeting has" : "Meetings have"} no Category.</span>
+          <span className="wt-menu">
+            <button className="wt-chip" onClick={() => setPicking(true)}>Pick Category</button>
+            <button className="wt-chip" onClick={() => setUncategorized([])}>Dismiss</button>
+          </span>
+        </div>
+      )}
       <p className="wt-error" role="alert">{notice}</p>
       {short && (
         <div className="wt-notice is-warning wt-notice-row" role="status">
@@ -420,12 +433,10 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             {slot.start.toLocaleString([], { timeZone: settings.tz, weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
             {slot.end.toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" })}
           </span>
-          <select className="wt-input" aria-label="Category" value={categoryId} onChange={(e) => setCategoryId(Number(e.target.value))}>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <div style={{ flex: 1 }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
           <input className="wt-input" aria-label="Description" autoFocus value={description} onChange={(e) => setDescription(e.target.value)} />
-          <button className="wt-chip is-primary" type="submit" disabled={!categoryId}>Save</button>
           <button className="wt-chip" type="button" onClick={close}>Cancel</button>
+          <button className="wt-chip is-primary" type="submit" disabled={!categoryId}>Save</button>
           <ErrorLine error={error} retry={failed ? save : undefined} />
         </form>
       )}
@@ -457,8 +468,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           </label>
           <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} aria-label="From" value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} />
           <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} aria-label="To" value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} />
-          <button className="wt-chip is-primary" type="submit">Save</button>
           <button className="wt-chip" type="button" onClick={() => setAbsenceForm(null)}>Cancel</button>
+          <button className="wt-chip is-primary" type="submit">Save</button>
           <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
         </form>
       )}

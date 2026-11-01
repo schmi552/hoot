@@ -468,16 +468,19 @@ pub struct ImportedMeeting {
     pub exceptions: Vec<MeetingException>,
 }
 
-/// Save imported Meetings. All of them are saved or none.
-pub fn import_meetings(conn: &mut Connection, meetings: &[ImportedMeeting]) -> Result<()> {
+/// Save imported Meetings. All of them are saved or none. Returns the ids of the new series.
+pub fn import_meetings(conn: &mut Connection, meetings: &[ImportedMeeting]) -> Result<Vec<i64>> {
     let tx = conn.transaction()?;
+    let mut ids = vec![];
     for m in meetings {
         let id = create_meeting(&tx, &m.series)?.id;
+        ids.push(id);
         for x in &m.exceptions {
             set_meeting_exception(&tx, &MeetingException { series_id: id, ..x.clone() })?;
         }
     }
-    tx.commit()
+    tx.commit()?;
+    Ok(ids)
 }
 
 pub fn list_meeting_exceptions(conn: &Connection) -> Result<Vec<MeetingException>> {
@@ -811,8 +814,9 @@ mod tests {
         assert!(import_meetings(&mut conn, &bad).is_err());
         assert!(list_meetings(&conn).unwrap().is_empty());
 
-        import_meetings(&mut conn, &bad[..1]).unwrap();
+        let ids = import_meetings(&mut conn, &bad[..1]).unwrap();
         let saved = list_meetings(&conn).unwrap();
+        assert_eq!(ids, vec![saved[0].id]);
         assert_eq!(saved.len(), 1);
         assert_eq!(list_meeting_exceptions(&conn).unwrap(), vec![MeetingException { series_id: saved[0].id, ..skip }]);
     }

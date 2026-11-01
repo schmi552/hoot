@@ -106,7 +106,7 @@ fn create_meeting(db: State<Db>, meeting: store::MeetingSeries) -> Result<store:
 }
 
 #[tauri::command]
-fn import_meetings(db: State<Db>, meetings: Vec<store::ImportedMeeting>) -> Result<(), String> {
+fn import_meetings(db: State<Db>, meetings: Vec<store::ImportedMeeting>) -> Result<Vec<i64>, String> {
     store::import_meetings(&mut db.0.lock().unwrap(), &meetings).map_err(|e| e.to_string())
 }
 

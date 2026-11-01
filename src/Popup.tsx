@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { createContext, KeyboardEvent, useContext, useEffect, useId, useRef, useState } from "react";
+import { createContext, KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
 import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
 import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
+import { CategoryCombo } from "./CategoryCombo";
 import { Hoot, Mood } from "./Hoot";
 import type { Settings } from "./Settings";
 import type { Appearance } from "./theme";
@@ -174,7 +175,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => voi
           <div className="wt-composer">
             <div className="wt-row">
               <span className="wt-label">Category</span>
-              <div style={{ flex: 1 }}><Combo options={categories} value={categoryId} onChange={setCategoryId} /></div>
+              <div style={{ flex: 1 }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
             </div>
             <div className="wt-row">
               <input ref={input} autoFocus className="wt-input" aria-label="What did you do" placeholder={last ? "...or tell me what you did instead" : "What did you do?"} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -287,7 +288,7 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
           )}
           <div className="wt-row">
             <span className="wt-label">Category</span>
-            <div style={{ flex: 1 }}><Combo options={categories} value={categoryId} onChange={setCategoryId} /></div>
+            <div style={{ flex: 1 }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
           </div>
           <div className="wt-row">
             <input autoFocus={choice === "accept"} className="wt-input" aria-label="What did you do" placeholder="What did you do?" value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -323,41 +324,6 @@ function Say({ text, mood }: { text: string; mood?: Mood }) {
     <div className="wt-bot">
       <Hoot px={3} mood={mood} show={showMascot} />
       <div className="wt-bubble">{text}</div>
-    </div>
-  );
-}
-
-/** A Category field that holds the chosen Category. Its list opens upward. */
-function Combo({ options, value, onChange }: { options: Category[]; value: number; onChange: (id: number) => void }) {
-  const label = (o: Category) => (o.code ? `${o.code} ${o.name}` : o.name);
-  const chosen = options.find((o) => o.id === value);
-  const name = chosen ? label(chosen) : "";
-  const id = useId();
-  const [text, setText] = useState(name);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  useEffect(() => setText(name), [name]);
-  const shown = text === name ? options : options.filter((o) => label(o).toLowerCase().includes(text.toLowerCase()));
-  const pick = (o: Category) => { onChange(o.id); setText(label(o)); setOpen(false); };
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      setOpen(true);
-      setActive((a) => Math.min(Math.max(a + (e.key === "ArrowDown" ? 1 : -1), 0), shown.length - 1));
-    } else if (open && e.key === "Enter" && shown[active]) { e.stopPropagation(); pick(shown[active]); }
-    else if (open && e.key === "Escape") { e.stopPropagation(); setOpen(false); setText(name); }
-  };
-  return (
-    <div className="wt-combo">
-      <input className="wt-input" role="combobox" aria-label="Category" aria-expanded={open} aria-controls={id} aria-autocomplete="list" placeholder="Category (type to filter)"
-        value={text} onChange={(e) => { setText(e.target.value); setActive(0); setOpen(true); }} onBlur={() => { setOpen(false); setText(name); }} onKeyDown={onKeyDown} />
-      {open && shown.length > 0 && (
-        <ul id={id} role="listbox">
-          {shown.map((o, i) => (
-            <li key={o.id} role="option" aria-selected={i === active} className={i === active ? "is-active" : ""} onMouseDown={(e) => { e.preventDefault(); pick(o); }}><span className="wt-dot" style={{ "--dot": `var(--cat-${o.color}-solid)` } as React.CSSProperties} />{label(o)}</li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
