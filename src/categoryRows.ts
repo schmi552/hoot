@@ -27,3 +27,16 @@ export function addMinutes(time: string, minutes: number): string {
   if (total >= 24 * 60) return "";
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
+
+/** The minutes of each Category inside [from, to) (seconds since 1970), by Category id. */
+export function monthMinutes(entries: { categoryId: number; startUtc: number; endUtc: number }[], from: number, to: number) {
+  const minutes: Record<number, number> = {};
+  for (const e of entries) {
+    const seconds = Math.max(0, Math.min(e.endUtc, to) - Math.max(e.startUtc, from));
+    minutes[e.categoryId] = (minutes[e.categoryId] ?? 0) + seconds / 60;
+  }
+  return minutes;
+}
+
+/** True if `code` is not empty and another Category has it. */
+export const codeTaken = (code: string, categories: { code: string }[]) => !!code.trim() && categories.some((c) => c.code === code.trim());

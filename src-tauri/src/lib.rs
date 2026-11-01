@@ -34,6 +34,11 @@ fn remove_category(db: State<Db>, id: i64) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn used_categories(db: State<Db>) -> Result<Vec<i64>, String> {
+    store::used_categories(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_settings(db: State<Db>) -> Result<Option<store::Settings>, String> {
     store::settings_on(&db.0.lock().unwrap(), &safety::today()).map_err(|e| e.to_string())
 }
@@ -188,6 +193,28 @@ fn restore_latest_backup(app: AppHandle) -> Result<i64, String> {
 }
 
 #[tauri::command]
+fn latest_backup(app: AppHandle) -> Result<Option<safety::Backup>, String> {
+    Ok(safety::latest_backup(&app.path().app_data_dir().map_err(|e| e.to_string())?))
+}
+
+/// Restores the newest daily backup over the database and restarts the app. A failed restore leaves the app running.
+#[tauri::command]
+fn restore_and_restart(app: AppHandle, db: State<Db>) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut conn = db.0.lock().unwrap();
+    *conn = rusqlite::Connection::open_in_memory().map_err(|e| e.to_string())?; // closes the file, so Windows can replace it
+    match safety::restore_latest_backup(&dir) {
+        Ok(_) => app.restart(),
+        Err(e) => {
+            if let Ok(old) = safety::open_safely(&dir) {
+                *conn = old;
+            }
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
 fn show_backups_folder(app: AppHandle) -> Result<(), String> {
     let dir = safety::backups_dir(&app.path().app_data_dir().map_err(|e| e.to_string())?);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -313,6 +340,7 @@ pub fn run() {
             update_category,
             list_categories,
             remove_category,
+            used_categories,
             get_settings,
             save_settings,
             list_settings_history,
@@ -339,6 +367,8 @@ pub fn run() {
             startup_failure,
             start_empty,
             restore_latest_backup,
+            latest_backup,
+            restore_and_restart,
             show_backups_folder,
             set_popup_visible,
             report_save_failure,

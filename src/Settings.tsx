@@ -3,6 +3,7 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
 import { addMinutes } from "./categoryRows";
 import { ChipGroup, DayPicker, TimeField } from "./fields";
+import { Backups, Categories, RecurringMeetings } from "./SettingsData";
 import { Appearance, Theme } from "./theme";
 import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
 
@@ -167,8 +168,6 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
 /** The settings screen. `onBack` leaves with no warning, so unsaved Work time edits are dropped. A save calls `onSaved`. */
 export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSaved: () => void; onBack: () => void }) {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
   const [look, setLook] = useState<Appearance>({ theme: "system", showMascot: true });
@@ -182,22 +181,6 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
   const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
   const setTheme = (theme: Theme) => invoke("set_theme", { theme }).then(() => setLook({ ...look, theme }), fail);
   const setShowMascot = (showMascot: boolean) => invoke("set_show_mascot", { show: showMascot }).then(() => setLook({ ...look, showMascot }), fail);
-  const add = () =>
-    invoke("add_category", { code: code.trim(), name: name.trim() }).then(() => {
-      setCode("");
-      setName("");
-      setMessage("");
-      refresh();
-    }, fail);
-  const change = (c: Category, patch: Partial<Category>) => {
-    const n = { ...c, ...patch };
-    invoke("update_category", { id: c.id, code: n.code.trim(), color: n.color }).then(() => setMessage(""), fail).then(refresh);
-  };
-  const remove = (c: Category) =>
-    invoke<boolean>("remove_category", { id: c.id }).then((archived) => {
-      setMessage(archived ? `${c.name} has Entries, so it is archived.` : "");
-      refresh();
-    }, fail);
 
   const firstCheck = firstCheckIn(saved);
   return (
@@ -212,59 +195,16 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
         <nav aria-label="Settings sections" className="wt-settings-nav">
           <a href="#work" aria-current="true">Work time</a>
           <a href="#cats">Categories</a>
+          <a href="#meetings">Recurring Meetings</a>
           <a href="#look">Appearance and startup</a>
           <a href="#back">Backups</a>
         </nav>
         <main className="wt-settings-main">
           <WorkTime key={JSON.stringify(saved)} saved={saved} onSaved={onSaved} />
 
-          <section id="cats" className="wt-section">
-            <h2>Categories</h2>
-            <ul>
-              {categories.map((c) => (
-                <li key={c.id}>
-                  <input
-                    key={c.code}
-                    className="wt-input"
-                    aria-label={`Code of ${c.name}`}
-                    size={8}
-                    defaultValue={c.code}
-                    onBlur={(e) => e.target.value.trim() !== c.code && change(c, { code: e.target.value })}
-                  />{" "}
-                  {c.name}{" "}
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      aria-label={`Color ${n} for ${c.name}`}
-                      aria-pressed={c.color === n}
-                      onClick={() => change(c, { color: n })}
-                      style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: "50%",
-                        border: c.color === n ? "2px solid var(--color-text)" : "1px solid transparent",
-                        background: `var(--cat-${n}-solid)`,
-                      }}
-                    />
-                  ))}{" "}
-                  <button className="wt-chip" onClick={() => remove(c)}>Remove</button>
-                </li>
-              ))}
-            </ul>
-            <div className="wt-startup-actions">
-              <input className="wt-input" aria-label="New Category code" size={8} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
-              <input
-                className="wt-input"
-                aria-label="New Category"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && name.trim() && add()}
-              />
-              <button className="wt-chip" onClick={add} disabled={!name.trim()}>Add Category</button>
-            </div>
-            <p className="wt-error" role="alert">{message}</p>
-          </section>
+          <Categories settings={saved} categories={categories} refresh={refresh} />
+
+          <RecurringMeetings settings={saved} categories={categories} />
 
           <section id="look" className="wt-section">
             <h2>Appearance and startup</h2>
@@ -287,14 +227,10 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
               Show the mascot
             </label>
             {firstCheck && <span className="wt-hint">First check-in today at {firstCheck}.</span>}
+            <p className="wt-error" role="alert">{message}</p>
           </section>
 
-          <section id="back" className="wt-section">
-            <h2>Backups</h2>
-            <div>
-              <button className="wt-chip" onClick={() => invoke("show_backups_folder")}>Show backups folder</button>
-            </div>
-          </section>
+          <Backups tz={saved.tz} />
         </main>
       </div>
     </div>

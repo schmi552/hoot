@@ -225,15 +225,22 @@ pub fn settings_history(conn: &Connection) -> Result<Vec<SettingsRow>> {
         .collect()
 }
 
+/// The ids of the non-archived Categories that an Entry, a Meeting series or an exception uses. Removing one of them archives it.
+pub fn used_categories(conn: &Connection) -> Result<Vec<i64>> {
+    conn.prepare(
+        "SELECT id FROM category WHERE archived_at IS NULL AND (
+             EXISTS(SELECT 1 FROM entry WHERE category_id = category.id)
+             OR EXISTS(SELECT 1 FROM meeting_series WHERE category_id = category.id)
+             OR EXISTS(SELECT 1 FROM meeting_exception WHERE category_id = category.id))
+         ORDER BY id",
+    )?
+    .query_map([], |r| r.get(0))?
+    .collect()
+}
+
 /// Delete a Category, or archive it when an Entry, a Meeting series or an exception uses it. Returns true if it was archived.
 pub fn remove_category(conn: &Connection, id: i64) -> Result<bool> {
-    let used: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM entry WHERE category_id = ?1)
-             OR EXISTS(SELECT 1 FROM meeting_series WHERE category_id = ?1)
-             OR EXISTS(SELECT 1 FROM meeting_exception WHERE category_id = ?1)",
-        [id],
-        |r| r.get(0),
-    )?;
+    let used = used_categories(conn)?.contains(&id);
     if used {
         conn.execute("UPDATE category SET archived_at = unixepoch() WHERE id = ?1", [id])?;
     } else {
@@ -996,6 +1003,7 @@ mod tests {
         conn.execute("INSERT INTO meeting_series (category_id, title, start_local, duration_minutes, tz) VALUES (?1, 'm', '2026-03-23T10:00', 30, 'UTC')", [host.id]).unwrap();
         conn.execute("INSERT INTO meeting_exception (series_id, original_start_local, kind, category_id) VALUES (?1, '2026-03-24T10:00', 'override', ?2)", (conn.last_insert_rowid(), by_exception.id)).unwrap();
 
+        assert_eq!(used_categories(&conn).unwrap(), vec![by_series.id, by_exception.id, host.id]);
         assert!(remove_category(&conn, by_series.id).unwrap());
         assert!(remove_category(&conn, by_exception.id).unwrap());
     }

@@ -81,6 +81,21 @@ fn backup_date(path: &Path) -> String {
     path.file_stem().unwrap().to_string_lossy()["tracker-".len()..].to_string()
 }
 
+/// The newest daily backup: its file name and the time of its last write (seconds since 1970).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Backup {
+    pub name: String,
+    pub modified_utc: i64,
+}
+
+pub fn latest_backup(dir: &Path) -> Option<Backup> {
+    let path = daily_backups(dir).pop()?;
+    let modified = fs::metadata(&path).ok()?.modified().ok()?;
+    let modified_utc = modified.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64;
+    Some(Backup { name: path.file_name()?.to_string_lossy().into_owned(), modified_utc })
+}
+
 fn daily_backup(conn: &Connection, dir: &Path) -> Result<(), String> {
     fs::create_dir_all(backups_dir(dir)).map_err(|e| e.to_string())?;
     let todays = backups_dir(dir).join(format!("tracker-{}.db", today()));
@@ -296,6 +311,15 @@ mod tests {
         assert!(restore_latest_backup(dir.path()).is_err());
 
         assert!(matches!(open_safely(dir.path()), Err(Failure::Corrupt { .. })));
+    }
+
+    #[test]
+    fn the_latest_backup_is_the_newest_daily_file() {
+        let dir = dir_with_data();
+        assert_eq!(latest_backup(dir.path()).unwrap().name, format!("tracker-{}.db", today()));
+        fs::write(backups_dir(dir.path()).join("tracker-pre-migration.bak"), "x").unwrap();
+        assert_eq!(latest_backup(dir.path()).unwrap().name, format!("tracker-{}.db", today()));
+        assert_eq!(latest_backup(tempfile::tempdir().unwrap().path()), None);
     }
 
     #[test]

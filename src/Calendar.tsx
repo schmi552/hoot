@@ -14,9 +14,10 @@ import {
   dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
-import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, Repeat, REPEATS, ruleFor, sourceText } from "./schedule/meetings";
+import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, sourceText } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ImportDialog } from "./Import";
+import { localInput, MeetingAsk, MeetingDialog } from "./MeetingDialog";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
@@ -30,16 +31,8 @@ const DEFAULT_MINUTES = 60;
 const SLOT_MINUTES = 30;
 const DAY = 86_400; // shortcut: a day step is 24 hours, so it is an hour off across a DST change; upgrade with instantAt if that matters
 const secs = (d: Date) => d.getTime() / 1000;
-/** An instant as "YYYY-MM-DDTHH:MM" on the wall clock of `tz`. */
-const localInput = (tz: string, sec: number) => {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(sec * 1000).map((x) => [x.type, x.value]));
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
-};
-type MeetingForm = { title: string; categoryId: number; source: string; start: string; duration: number; repeat: Repeat; editing?: MeetingOccurrence };
 /** The Absence dialog. A full-day Absence uses `from` and `to` as dates; a part-day Absence uses them as "YYYY-MM-DDTHH:MM". */
 type AbsenceForm = { kind: AbsenceKind; label: string; allDay: boolean; from: string; to: string };
-/** What the scope dialog is asking about: the changed form of a Meeting, or a delete. */
-type Scope = { occurrence: MeetingOccurrence; form?: MeetingForm };
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
 export function Calendar({ settings, onSettings }: { settings: Settings; onSettings: () => void }) {
@@ -58,9 +51,8 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   const [selected, setSelected] = useState(0);
   const [notice, setNotice] = useState("");
   const [series, setSeries] = useState<MeetingSeries[]>([]);
-  const [meetingForm, setMeetingForm] = useState<MeetingForm | null>(null);
+  const [meeting, setMeeting] = useState<MeetingAsk | null>(null);
   const [exceptions, setExceptions] = useState<MeetingException[]>([]);
-  const [scope, setScope] = useState<Scope | null>(null);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [absenceForm, setAbsenceForm] = useState<AbsenceForm | null>(null);
   const [pickedAbsence, setPickedAbsence] = useState<Absence | null>(null);
@@ -115,43 +107,12 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
     setMenu(false);
     setPicked(null);
     const start = picked ? secs(picked) : defaultStart();
-    setMeetingForm({ title: "", categoryId: categories[0]?.id ?? 0, source: "", start: localInput(settings.tz, start), duration: DEFAULT_MINUTES, repeat: "none" });
-    setError(categories.length ? "" : "Add a Category in Settings first.");
-    setFailed(false);
+    setMeeting({ form: { title: "", categoryId: categories[0]?.id ?? 0, source: "", start: localInput(settings.tz, start), duration: DEFAULT_MINUTES, repeat: "none" } });
   };
   const editMeeting = (m: MeetingOccurrence) => {
     setMenu(false);
     setPicked(null);
-    setMeetingForm({ title: m.title, categoryId: m.categoryId ?? 0, source: sourceText(series.find((x) => x.id === m.seriesId) ?? { sourceFile: null }), start: localInput(settings.tz, m.startUtc), duration: (m.endUtc - m.startUtc) / 60, repeat: "none", editing: m });
-    setError("");
-    setFailed(false);
-  };
-  /** Run a Meeting write; on success close the dialogs, on failure show the error where the user can retry. */
-  const writeMeeting = (write: Promise<unknown>) =>
-    write.then(
-      () => (setMeetingForm(null), setScope(null), setPickedMeeting(null), load()),
-      (e) => (setError(String(e)), setFailed(true)),
-    );
-  /** Change or delete one occurrence ("This Meeting only") or the series ("All Meetings"). */
-  const changeMeeting = (s: Scope, only: boolean) => {
-    const { occurrence: o, form: f } = s;
-    const base = series.find((x) => x.id === o.seriesId)!;
-    if (!f) return writeMeeting(only ? invoke("set_meeting_exception", { exception: { seriesId: o.seriesId, originalStartLocal: o.originalStartLocal, kind: "skip", startLocal: null, durationMinutes: null, title: null, categoryId: null } }) : invoke("delete_meeting", { id: o.seriesId }));
-    if (only) return writeMeeting(invoke("set_meeting_exception", { exception: { seriesId: o.seriesId, originalStartLocal: o.originalStartLocal, kind: "override", startLocal: f.start, durationMinutes: f.duration, title: f.title.trim(), categoryId: f.categoryId } }));
-    // "All Meetings": the series start moves by as much as the user moved the occurrence in the form.
-    const moved = Temporal.PlainDateTime.from(base.startLocal).add(Temporal.PlainDateTime.from(localInput(settings.tz, o.startUtc)).until(Temporal.PlainDateTime.from(f.start)));
-    return writeMeeting(invoke("update_meeting", { meeting: { ...base, categoryId: f.categoryId || null, title: f.title.trim(), startLocal: moved.toString({ smallestUnit: "minute" }), durationMinutes: f.duration } }));
-  };
-  /** A one-off Meeting has no scope to ask about. */
-  const askScope = (s: Scope) => (series.find((x) => x.id === s.occurrence.seriesId)?.rrule ? setScope(s) : void changeMeeting(s, false));
-  const saveMeeting = () => {
-    const f = meetingForm!;
-    if (!f.title.trim() || !f.start || f.duration < 1) return setError("Give the Meeting a title, a start and a length."), setFailed(false);
-    if (f.editing) return askScope({ occurrence: f.editing, form: f });
-    invoke("create_meeting", { meeting: { id: 0, categoryId: f.categoryId || null, title: f.title.trim(), startLocal: f.start, durationMinutes: f.duration, tz: settings.tz, rrule: ruleFor(f.repeat), sourceFile: null } }).then(
-      () => (setMeetingForm(null), load()),
-      (e) => (setError(String(e)), setFailed(true)),
-    );
+    setMeeting({ form: { title: m.title, categoryId: m.categoryId ?? 0, source: sourceText(series.find((x) => x.id === m.seriesId) ?? { sourceFile: null }), start: localInput(settings.tz, m.startUtc), duration: (m.endUtc - m.startUtc) / 60, repeat: "none", editing: m } });
   };
   const openAbsence = (from?: string, to?: string) => {
     setMenu(false);
@@ -236,7 +197,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   const onKey = useRef<(e: KeyboardEvent) => void>(undefined);
   onKey.current = (e) => {
-    if (slot || meetingForm || absenceForm || scope || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
+    if (slot || meeting || absenceForm || e.altKey || (e.target as HTMLElement).closest("input, select, textarea")) return;
     const k = e.key.toLowerCase();
     const mod = e.metaKey || e.ctrlKey;
     const keep = () => e.preventDefault();
@@ -247,7 +208,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       clipboard.current = { id: 0, categoryId: pickedMeeting.categoryId ?? categories[0]?.id ?? 0, description: pickedMeeting.title, startUtc: pickedMeeting.startUtc, endUtc: pickedMeeting.endUtc, tz: settings.tz };
       return;
     }
-    if (pickedMeeting && !mod && (k === "delete" || k === "backspace")) return keep(), askScope({ occurrence: pickedMeeting });
+    if (pickedMeeting && !mod && (k === "delete" || k === "backspace")) return keep(), setMeeting({ remove: pickedMeeting });
     if (pickedMeeting && k === "enter") return keep(), editMeeting(pickedMeeting);
     if (k === "n" && !mod) {
       keep();
@@ -324,7 +285,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
       {pickedMeeting && (
         <>
           <button className="wt-chip" onClick={() => editMeeting(pickedMeeting)}>Edit Meeting</button>
-          <button className="wt-chip" onClick={() => askScope({ occurrence: pickedMeeting })}>Delete Meeting</button>
+          <button className="wt-chip" onClick={() => setMeeting({ remove: pickedMeeting })}>Delete Meeting</button>
         </>
       )}
       {pickedAbsence && <button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button>}
@@ -354,32 +315,15 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <ErrorLine error={error} retry={failed ? save : undefined} />
         </form>
       )}
-      {meetingForm && (
-        <form
-          className="wt-form wt-editor"
-          onKeyDown={(e) => e.key === "Escape" && setMeetingForm(null)}
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveMeeting();
-          }}
-        >
-          <input className="wt-input" aria-label="Title" placeholder="Title" autoFocus value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })} />
-          <select className="wt-input" aria-label="Category" value={meetingForm.categoryId} onChange={(e) => setMeetingForm({ ...meetingForm, categoryId: Number(e.target.value) })}>
-            <option value={0}>None</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          {meetingForm.source && <p className="wt-sub">{meetingForm.source}</p>}
-          <input className="wt-input" type="datetime-local" aria-label="Start" value={meetingForm.start} onChange={(e) => setMeetingForm({ ...meetingForm, start: e.target.value })} />
-          <input className="wt-input" type="number" min={1} step={5} aria-label="Duration in minutes" value={meetingForm.duration} onChange={(e) => setMeetingForm({ ...meetingForm, duration: Number(e.target.value) })} />
-          {!meetingForm.editing && (
-            <select className="wt-input" aria-label="Repeat" value={meetingForm.repeat} onChange={(e) => setMeetingForm({ ...meetingForm, repeat: e.target.value as Repeat })}>
-              {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
-            </select>
-          )}
-          <button className="wt-chip is-primary" type="submit">Save</button>
-          <button className="wt-chip" type="button" onClick={() => setMeetingForm(null)}>Cancel</button>
-          <ErrorLine error={error} retry={failed ? saveMeeting : undefined} />
-        </form>
+      {meeting && (
+        <MeetingDialog
+          settings={settings}
+          categories={categories}
+          series={series}
+          ask={meeting}
+          onClose={() => setMeeting(null)}
+          onDone={() => (setMeeting(null), setPickedMeeting(null), load())}
+        />
       )}
       {absenceForm && (
         <form
@@ -402,15 +346,6 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           <button className="wt-chip is-primary" type="submit">Save</button>
           <button className="wt-chip" type="button" onClick={() => setAbsenceForm(null)}>Cancel</button>
           <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
-        </form>
-      )}
-      {scope && (
-        <form className="wt-form wt-editor" role="alertdialog" aria-label="Which Meetings" onKeyDown={(e) => e.key === "Escape" && setScope(null)} onSubmit={(e) => e.preventDefault()}>
-          <span className="wt-sub">{scope.form ? "Change" : "Delete"}:</span>
-          <button className="wt-chip is-primary" type="button" autoFocus onClick={() => changeMeeting(scope, true)}>This Meeting only</button>
-          <button className="wt-chip" type="button" onClick={() => changeMeeting(scope, false)}>All Meetings</button>
-          <button className="wt-chip" type="button" onClick={() => setScope(null)}>Cancel</button>
-          <ErrorLine error={error} />
         </form>
       )}
       <FullCalendar

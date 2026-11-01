@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { addMinutes, checkCategories } from "./categoryRows";
+import { addMinutes, checkCategories, codeTaken, monthMinutes } from "./categoryRows";
 
 const row = (code: string, name = "") => ({ code, name });
 
@@ -28,4 +28,19 @@ test("a lunch length is added to the start", () => {
   expect(addMinutes("12:00", 45)).toBe("12:45");
   expect(addMinutes("23:30", 60)).toBe("");
   expect(addMinutes("", 30)).toBe("");
+});
+
+test("month minutes add up per Category and cut an Entry at the month edges", () => {
+  const entries = [
+    { categoryId: 1, startUtc: 100, endUtc: 900 },
+    { categoryId: 1, startUtc: 3000, endUtc: 3600 },
+    { categoryId: 2, startUtc: 0, endUtc: 600 },
+  ];
+  expect(monthMinutes(entries, 300, 3300)).toEqual({ 1: 10 + 5, 2: 5 });
+});
+
+test("a code is taken when another Category has it, but an empty code never is", () => {
+  expect(codeTaken(" A1 ", [{ code: "A1" }])).toBe(true);
+  expect(codeTaken("B", [{ code: "A1" }])).toBe(false);
+  expect(codeTaken("", [{ code: "" }])).toBe(false);
 });
