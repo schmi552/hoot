@@ -65,7 +65,7 @@ export function validate(s: Settings, start = "", today = ""): string {
   return "";
 }
 
-const INTERVALS = [15, 30, 45, 60];
+export const INTERVALS = [15, 30, 45, 60];
 const minutesOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 
 /** "8h 30m" for a number of minutes. */
@@ -102,9 +102,11 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
   const next = { ...s, ...(parsed ?? {}) };
   const problem = parsed ? validate(next, start, today) : "Enter the lunch as HH:MM · N min.";
   const time = timeProblems(next);
-  const expected = [expectedMinutes(saved), expectedMinutes(next)];
+  const before = expectedMinutes(saved);
+  const after = expectedMinutes(next);
   const reset = () => {
     setS(saved);
+    setFrom(nextMonday(today));
     setLunch(formatLunch(saved));
     setMessage("");
   };
@@ -139,10 +141,10 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
         {dated && (
           <div role="status" className="wt-notice wt-notice-row">
             <span>
-              {expected[0] === expected[1] ? (
+              {before === after ? (
                 "The Workdays change."
               ) : (
-                <>Expected per day changes from <b className="wt-mono">{hours(expected[0])}</b> to <b className="wt-mono">{hours(expected[1])}</b>.</>
+                <>Expected per day changes from <b className="wt-mono">{hours(before)}</b> to <b className="wt-mono">{hours(after)}</b>.</>
               )}{" "}
               Weeks before the start date keep the old value.
             </span>

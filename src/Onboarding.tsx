@@ -4,12 +4,11 @@ import { useId, useState } from "react";
 import { ChipGroup, DayPicker, TimeField } from "./fields";
 import { Hoot } from "./Hoot";
 import { addMinutes, checkCategories, CategoryDraft } from "./categoryRows";
-import { defaults, hours, Settings, timeProblems, validate } from "./Settings";
+import { defaults, hours, INTERVALS, Settings, timeProblems, validate } from "./Settings";
 import { dateKey, expectedMinutes, ymdIn } from "./schedule/schedule";
 
 const COLOR_NAMES = ["Blue", "Orange", "Teal", "Purple", "Green", "Pink", "Amber", "Slate"];
 const LUNCH_MINUTES = [30, 45, 60];
-const INTERVALS = [15, 30, 45, 60];
 const emptyRow = (): CategoryDraft => ({ code: "", name: "" });
 /** One numbered step of the card. The title names the group for screen readers. */
 function Step({ n, title, children }: { n: number; title: React.ReactNode; children: React.ReactNode }) {
