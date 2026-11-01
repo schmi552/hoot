@@ -319,18 +319,18 @@ button.wt-icon-btn:hover { color: var(--color-text); }
   overflow: hidden;
 }
 .wt-calendar :is(.wt-entry, .wt-meeting, .wt-absence) > * { color: inherit; } /* the theme sets a color on the inner element */
-.wt-entry-text { display: flex; flex-direction: column; gap: 1px; padding: var(--space-xs) var(--space-sm); font-size: var(--text-body); line-height: 1.25; text-align: left; }
+.wt-entry-text { display: flex; flex-direction: column; gap: var(--border-width); padding: var(--space-xs) var(--space-sm); font-size: var(--text-body); line-height: var(--entry-line-height); text-align: left; }
 .wt-entry-text.is-compact { padding: 0 var(--space-xs); font-size: var(--text-caption); }
-.wt-entry-text b, .wt-entry-text span, .wt-meeting-text b, .wt-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wt-entry-text b, .wt-entry-text span, .wt-meeting-text b, .wt-absence-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wt-entry-text span { font-size: var(--text-caption); }
-.wt-grip { position: absolute; left: 50%; bottom: 3px; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--cat-ink); }
+.wt-grip { position: absolute; left: 50%; bottom: var(--grip-offset); width: var(--grip-width); height: var(--grip-height); margin-left: calc(var(--grip-width) / -2); border-radius: var(--grip-height); background: var(--cat-ink); }
 .wt-calendar .wt-meeting {
   background: var(--meeting-bg);
   color: var(--meeting-fg);
   border: var(--meeting-border-width) var(--meeting-border-style) var(--cat-solid);
   border-radius: var(--entry-radius);
 }
-.wt-meeting-text { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-xs); padding: 0 var(--space-xs); font-size: var(--text-caption); line-height: 1.1; }
+.wt-meeting-text { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-xs); padding: 0 var(--space-xs); font-size: var(--text-caption); line-height: var(--meeting-line-height); }
 .wt-meeting-text svg { flex: none; }
 .wt-calendar .wt-absence {
   background: repeating-linear-gradient(135deg, var(--absence-stripe) 0 var(--hatch-width), var(--absence-bg) var(--hatch-width) calc(2 * var(--hatch-width)));
@@ -338,7 +338,7 @@ button.wt-icon-btn:hover { color: var(--color-text); }
   border: var(--border-width) solid var(--calendar-border);
   border-radius: var(--entry-radius);
 }
-.wt-label { display: inline-block; max-width: 100%; box-sizing: border-box; margin: var(--space-xs); padding: 1px var(--space-sm); border-radius: var(--radius-control); background: var(--absence-label-bg); color: var(--color-text); font-size: var(--text-caption); }
+.wt-absence-label { display: inline-block; max-width: 100%; box-sizing: border-box; margin: var(--space-xs); padding: var(--border-width) var(--space-sm); border-radius: var(--radius-control); background: var(--absence-label-bg); color: var(--color-text); font-size: var(--text-caption); }
 .wt-calendar .wt-slot-half { border-top-color: transparent; }
 .wt-menu { display: inline-flex; gap: var(--space-sm); }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }

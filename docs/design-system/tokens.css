@@ -372,6 +372,11 @@
   --kbd-px: 6px;
   --enter-offset: 6px;
   --hatch-width: 6px;
+  --grip-width: 24px;
+  --grip-height: 3px;
+  --grip-offset: 3px;
+  --entry-line-height: 1.25;
+  --meeting-line-height: 1.1;
   --outline-inset: -1px;
   --selected-ring-offset: 1px;
 

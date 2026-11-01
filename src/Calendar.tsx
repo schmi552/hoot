@@ -11,7 +11,7 @@ import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, Ymd, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
 import { daysIn, entryText, gridRange, hiddenDays } from "./schedule/week";
@@ -92,9 +92,11 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   useEffect(() => void invoke<Absence[]>("list_absences").then(setAbsences), [reload]);
   const meetings = range ? expandMeetings(series, exceptions, range[0], range[1]) : [];
   const away = absenceSpans(absences, settings.tz);
-  // Only the Workdays show, and a non-workday that holds an item; the grid runs over the work hours plus one hour each side and widens for items outside.
-  const hidden = range && isWeek ? hiddenDays(settings.tz, daysIn(settings.tz, range[0], range[1]), (d) => isWorkday((rows.length ? settingsOn(rows, d) : settings).workdays, d), [...entries, ...meetings, ...away]) : [];
-  const timed = [...entries, ...meetings, ...absences.filter((a) => a.startUtc !== null).map((a) => ({ startUtc: a.startUtc!, endUtc: a.endUtc! }))];
+  const settingsAt = (d: Ymd) => (rows.length ? settingsOn(rows, d) : settings); // the settings row valid on day `d`
+  // Hide the days that are no Workday and hold no item.
+  const hidden = range && isWeek ? hiddenDays(settings.tz, daysIn(settings.tz, range[0], range[1]), (d) => isWorkday(settingsAt(d).workdays, d), [...entries, ...meetings, ...away]) : [];
+  // A full-day Absence has its own row, so only part-day Absences widen the grid.
+  const timed = [...entries, ...meetings, ...away.filter((_, i) => !absences[i].startDate)];
   const hours = gridRange(settings.workStart, settings.workEnd, settings.tz, timed);
   const clock = (sec: number) => new Intl.DateTimeFormat("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(sec * 1000);
   const hourText = (h: number) => `${String(h).padStart(2, "0")}:00:00`;
@@ -266,12 +268,12 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   // The header date is the start of the day in the zone of the settings.
   const dayOf = (d: Date) => ymdIn(settings.tz, secs(d));
-  const expected = (d: Date) => expectedOn(rows.length ? settingsOn(rows, dayOf(d)) : settings, dayOf(d), away);
+  const expected = (d: Date) => expectedOn(settingsAt(dayOf(d)), dayOf(d), away);
   const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
   const where = (d: Date) => ({ home: "Home", office: "Office" })[locations[dateKey(dayOf(d))]] ?? "";
   const daySub = (d: Date) => `${formatHM(logged(d))} / ${formatHM(expected(d))}${where(d) && ` · ${where(d)}`}`;
   const name = (id: number | null) => categories.find((c) => c.id === id)?.name ?? "";
-  const colorOf = (id: number) => categories.find((c) => c.id === id)?.color ?? 8;
+  const catClass = (id: number | null) => `wt-cat-${categories.find((c) => c.id === id)?.color ?? "none"}`; // no Category, or an unknown one: gray
 
   return (
     <main
@@ -423,7 +425,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             title: `${name(e.categoryId)}: ${e.description}`,
             start: new Date(e.startUtc * 1000),
             end: new Date(e.endUtc * 1000),
-            className: `wt-entry wt-cat-${colorOf(e.categoryId)}${e.id === selected ? " wt-selected" : ""}`,
+            className: `wt-entry ${catClass(e.categoryId)}${e.id === selected ? " wt-selected" : ""}`,
             extendedProps: { entry: e },
           })),
           ...meetings.map((m) => ({
@@ -432,7 +434,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             start: new Date(m.startUtc * 1000),
             end: new Date(m.endUtc * 1000),
             editable: false,
-            className: `wt-meeting wt-cat-${m.categoryId === null ? "none" : colorOf(m.categoryId)}`,
+            className: `wt-meeting ${catClass(m.categoryId)}`,
             extendedProps: { meeting: m, repeats: !!series.find((x) => x.id === m.seriesId)?.rrule },
           })),
           ...absences.map((a) => ({
@@ -473,7 +475,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
               </div>
             );
           }
-          return <span className="wt-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
+          return <span className="wt-absence-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
         }}
         dayHeaderContent={(i) => (
           <>

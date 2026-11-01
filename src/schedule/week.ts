@@ -34,12 +34,11 @@ function localMinutes(tz: string, sec: number): number {
 export function gridRange(workStart: string, workEnd: string, tz: string, timed: Span[]): { minHour: number; maxHour: number } {
   let min = parseHM(workStart) - 60;
   let max = parseHM(workEnd) + 60;
-  for (const x of timed) {
-    const start = localMinutes(tz, x.startUtc);
-    const end = localMinutes(tz, x.endUtc);
-    const sameDay = ymdIn(tz, x.startUtc).d === ymdIn(tz, x.endUtc).d || end === 0;
-    min = Math.min(min, start);
-    max = Math.max(max, sameDay && end !== 0 ? end : 1440);
+  for (const item of timed) {
+    const end = localMinutes(tz, item.endUtc);
+    const endsOnStartDay = end !== 0 && ymdIn(tz, item.startUtc).d === ymdIn(tz, item.endUtc).d; // an end at 00:00 or on a later day is the end of the grid
+    min = Math.min(min, localMinutes(tz, item.startUtc));
+    max = Math.max(max, endsOnStartDay ? end : 1440);
   }
   return { minHour: Math.max(0, Math.floor(min / 60)), maxHour: Math.min(24, Math.ceil(max / 60)) };
 }
