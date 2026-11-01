@@ -195,44 +195,47 @@ function fail(e: unknown, setError: (m: string) => void, setFailed: (f: boolean)
   invoke("report_save_failure");
 }
 
-type Part = { until: string; description: string; categoryId: number }; // `until` is "HH:MM"; the last part has none
-
-/** The popup for a Gap: accept it as one Entry, split it into parts, or leave it empty. Nothing is saved until the user answers. */
+/** The popup for a Gap: accept it as one Entry, split it at one time, or leave it empty. Nothing is saved until the user answers. */
 function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => void }) {
   const { now, settings, spans, previous, recents, categories } = ask;
   const [mode, setMode] = useState<"choose" | "accept" | "split">("choose");
-  const firstCategory = recents[0]?.categoryId ?? categories[0]?.id ?? 0;
-  const blank = (): Part => ({ until: "", description: "", categoryId: firstCategory });
-  const [parts, setParts] = useState<Part[]>([blank()]);
+  const [lines, setLines] = useState<string[]>([]); // the user's choices, shown as their own bubbles
+  const [from, setFrom] = useState(""); // "HH:MM", where the new part of a split starts
+  const [description, setDescription] = useState("");
+  const [categoryId, setCategoryId] = useState(recents[0]?.categoryId ?? categories[0]?.id ?? 0);
   const [error, setError] = useState(categories.length ? "" : "Add a Category in Settings first.");
   const [saved, setSaved] = useState(false);
   const [failed, setFailed] = useState(false); // the last write failed, so the error line offers a retry
-  const written = useRef(0); // Entries already stored, so a retry after a failure does not store them twice
+  const written = useRef(0); // writes already done, so a retry after a failure does not store them twice
   const time = (t: number) => new Date(t * 1000).toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" });
   const start = spans[0].startUtc;
   const end = spans[spans.length - 1].endUtc;
   const minutes = minutesBetween(start, end) - spans.slice(1).reduce((sum, p, i) => sum + minutesBetween(spans[i].endUtc, p.startUtc), 0);
   const ymd = ymdIn(settings.tz, now);
+  const canSplit = !!previous; // the part before the new time continues the last Entry
 
-  const choose = (m: "accept" | "split") => {
-    setMode(m);
-    setParts(m === "accept" ? [blank()] : [blank(), blank()]);
+  const choose = (m: "accept" | "split" | "leave") => {
+    if (m === "split" && !canSplit) return;
+    setLines([m === "accept" ? "Accept it" : m === "split" ? "Split it" : "Leave it empty"]);
+    if (m === "leave") setTimeout(() => onDone(now), SAVED_MS);
+    else setMode(m);
   };
-  const change = (i: number, p: Partial<Part>) => setParts((all) => all.map((x, j) => (j === i ? { ...x, ...p } : x)));
 
   const save = async () => {
-    const cuts = parts.slice(0, -1).map((p) => (p.until ? instantAt(settings.tz, ymd, parseHM(p.until)) : NaN));
-    if (cuts.some((c, i) => !(c > (cuts[i - 1] ?? start) && c < end))) return setError("Split times must rise and stay inside the Gap.");
-    const split = splitGap(spans, cuts);
-    const pieces = split.flatMap((ss, i) => ss.map((s) => ({ ...parts[i], ...s })));
-    if (split.some((ss) => !ss.length)) return setError("A part must hold work time.");
-    if (parts.some((p) => !p.description.trim())) return setError("Type what you did in every part.");
-    if (parts.some((p) => !p.categoryId)) return setError("Pick a Category for every part.");
+    const cut = mode === "split" ? (from ? instantAt(settings.tz, ymd, parseHM(from)) : NaN) : -Infinity;
+    if (mode === "split" && !(cut > start && cut < end)) return setError("New from must be inside the Gap.");
+    const [before, after] = mode === "split" ? splitGap(spans, [cut]) : [[], spans];
+    if (!after.length) return setError("The new part must hold work time.");
+    if (mode === "split" && !before.length) return setError("The part before must hold work time.");
+    if (!description.trim()) return setError("Type what you did.");
+    if (!categoryId) return setError("Pick a Category.");
+    const entry = (s: Span, e: { categoryId: number; description: string }) => ({ id: 0, categoryId: e.categoryId, description: e.description, startUtc: s.startUtc, endUtc: s.endUtc, tz: settings.tz });
+    const writes = [
+      ...before.map((s, i) => () => (i === 0 && previous!.endUtc === s.startUtc ? invoke("update_entry", { entry: { ...previous, endUtc: s.endUtc } }) : invoke("create_entry", { entry: entry(s, previous!) }))),
+      ...after.map((s) => () => invoke("create_entry", { entry: entry(s, { categoryId, description: description.trim() }) })),
+    ];
     try {
-      for (; written.current < pieces.length; written.current++) {
-        const p = pieces[written.current];
-        await invoke("create_entry", { entry: { id: 0, categoryId: p.categoryId, description: p.description.trim(), startUtc: p.startUtc, endUtc: p.endUtc, tz: settings.tz } });
-      }
+      for (; written.current < writes.length; written.current++) await writes[written.current]();
     } catch (e) {
       return fail(e, setError, setFailed);
     }
@@ -245,11 +248,11 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") onDone(now);
-    else if (mode === "choose" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    else if (mode === "choose" && !lines.length && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const k = e.key.toLowerCase();
       if (k === "a") choose("accept");
       else if (k === "s") choose("split");
-      else if (k === "l") onDone(now);
+      else if (k === "l") choose("leave");
     } else if (mode !== "choose" && e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") save();
   };
 
@@ -260,44 +263,31 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
         <span className="wt-sub">{time(now)} · Esc skip</span>
       </div>
       <div className="wt-thread" role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
-        <Say text={`Nothing is logged from ${time(start)} to ${time(end)} (${formatHM(minutes)}). What did you do?`} />
-        {saved && <Say text="Saved. See you next time!" />}
+        <Say text={`Nothing is logged from ${time(start)} to ${time(end)} (${formatHM(minutes)}). What did you do?`} mood={failed ? "problem" : "away"} />
+        {lines.map((l, i) => <div key={i} className="wt-me">{l}</div>)}
+        {saved && <Say text="Saved. See you next time!" mood="saved" />}
       </div>
-      {mode === "choose" && (
+      {mode === "choose" && !lines.length && (
         <div className="wt-quick" role="group" aria-label="Gap choices">
-          <button type="button" autoFocus className="wt-chip is-primary" onClick={() => choose("accept")}>Accept as one Entry (A)</button>
-          <button type="button" className="wt-chip" onClick={() => choose("split")}>Split (S)</button>
-          <button type="button" className="wt-chip" onClick={() => onDone(now)}>Leave empty (L)</button>
-          {previous && (
-            <button type="button" className="wt-chip" title={`Previous Entry, ${categories.find((c) => c.id === previous.categoryId)?.name}`} onClick={() => { setMode("accept"); setParts([{ until: "", description: previous.description, categoryId: previous.categoryId }]); }}>
-              Previous: {previous.description}
-            </button>
-          )}
+          <button type="button" autoFocus className="wt-chip is-primary" onClick={() => choose("accept")}>Accept (A)</button>
+          {canSplit && <button type="button" className="wt-chip" onClick={() => choose("split")}>Split (S)</button>}
+          <button type="button" className="wt-chip" onClick={() => choose("leave")}>Leave empty (L)</button>
         </div>
       )}
       {mode !== "choose" && !saved && (
         <div className="wt-composer">
-          {parts.map((p, i) => (
-            <div key={i}>
-              {mode === "split" && (
-                <div className="wt-row">
-                  <span className="wt-label">Part {i + 1}</span>
-                  {i < parts.length - 1 ? (
-                    <><span className="wt-label">until</span><input className="wt-input" type="time" aria-label={`Part ${i + 1} ends at`} value={p.until} onChange={(e) => change(i, { until: e.target.value })} /></>
-                  ) : <span className="wt-label">until {time(end)}</span>}
-                </div>
-              )}
-              <div className="wt-row">
-                <span className="wt-label">Category</span>
-                <div style={{ flex: 1 }}><Combo options={categories} value={p.categoryId} onChange={(categoryId) => change(i, { categoryId })} /></div>
-              </div>
-              <div className="wt-row">
-                <input autoFocus={i === 0} className="wt-input" aria-label={`What did you do${mode === "split" ? `, part ${i + 1}` : ""}`} placeholder="What did you do?" value={p.description} onChange={(e) => change(i, { description: e.target.value })} />
-              </div>
+          {mode === "split" && (
+            <div className="wt-row">
+              <span className="wt-label">New from</span>
+              <input autoFocus className="wt-input" type="time" aria-label="New from" value={from} onChange={(e) => setFrom(e.target.value)} />
             </div>
-          ))}
+          )}
           <div className="wt-row">
-            {mode === "split" && <button type="button" className="wt-chip" onClick={() => setParts((all) => [...all.slice(0, -1), blank(), all[all.length - 1]])}>Add part</button>}
+            <span className="wt-label">Category</span>
+            <div style={{ flex: 1 }}><Combo options={categories} value={categoryId} onChange={setCategoryId} /></div>
+          </div>
+          <div className="wt-row">
+            <input autoFocus={mode === "accept"} className="wt-input" aria-label="What did you do" placeholder="What did you do?" value={description} onChange={(e) => setDescription(e.target.value)} />
             <button type="button" className="wt-chip is-primary" onClick={save}>Save</button>
           </div>
           <ErrorLine error={error} retry={failed ? save : undefined} />
