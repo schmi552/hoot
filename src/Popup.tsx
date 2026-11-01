@@ -198,8 +198,7 @@ function fail(e: unknown, setError: (m: string) => void, setFailed: (f: boolean)
 /** The popup for a Gap: accept it as one Entry, split it at one time, or leave it empty. Nothing is saved until the user answers. */
 function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => void }) {
   const { now, settings, spans, previous, recents, categories } = ask;
-  const [mode, setMode] = useState<"choose" | "accept" | "split">("choose");
-  const [lines, setLines] = useState<string[]>([]); // the user's choices, shown as their own bubbles
+  const [choice, setChoice] = useState<"accept" | "split" | "leave" | null>(null); // the user's answer, shown as their own bubble
   const [from, setFrom] = useState(""); // "HH:MM", where the new part of a split starts
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState(recents[0]?.categoryId ?? categories[0]?.id ?? 0);
@@ -214,22 +213,27 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
   const ymd = ymdIn(settings.tz, now);
   const canSplit = !!previous; // the part before the new time continues the last Entry
 
-  const choose = (m: "accept" | "split" | "leave") => {
-    if (m === "split" && !canSplit) return;
-    setLines([m === "accept" ? "Accept it" : m === "split" ? "Split it" : "Leave it empty"]);
-    if (m === "leave") setTimeout(() => onDone(now), SAVED_MS);
-    else setMode(m);
-  };
+  const choose = (c: "accept" | "split" | "leave") => (c === "split" && !canSplit ? undefined : setChoice(c));
+  // The popup closes after a save or after "Leave empty". Esc unmounts it first, and the cleanup clears the timer.
+  useEffect(() => {
+    if (!saved && choice !== "leave") return;
+    const timer = setTimeout(() => onDone(now), SAVED_MS);
+    return () => clearTimeout(timer);
+  }, [saved, choice]);
 
   const save = async () => {
-    const cut = mode === "split" ? (from ? instantAt(settings.tz, ymd, parseHM(from)) : NaN) : -Infinity;
-    if (mode === "split" && !(cut > start && cut < end)) return setError("New from must be inside the Gap.");
-    const [before, after] = mode === "split" ? splitGap(spans, [cut]) : [[], spans];
-    if (!after.length) return setError("The new part must hold work time.");
-    if (mode === "split" && !before.length) return setError("The part before must hold work time.");
+    let before: Span[] = [];
+    let after = spans;
+    if (choice === "split") {
+      const cut = from ? instantAt(settings.tz, ymd, parseHM(from)) : NaN;
+      if (!previous || !(cut > start && cut < end)) return setError("New from must be inside the Gap.");
+      [before, after] = splitGap(spans, [cut]);
+      if (!before.length || !after.length) return setError("Each part must hold work time.");
+    }
     if (!description.trim()) return setError("Type what you did.");
     if (!categoryId) return setError("Pick a Category.");
     const entry = (s: Span, e: { categoryId: number; description: string }) => ({ id: 0, categoryId: e.categoryId, description: e.description, startUtc: s.startUtc, endUtc: s.endUtc, tz: settings.tz });
+    // Lunch can leave the part before with more than one span: the first extends the last Entry, the rest copy it.
     const writes = [
       ...before.map((s, i) => () => (i === 0 && previous!.endUtc === s.startUtc ? invoke("update_entry", { entry: { ...previous, endUtc: s.endUtc } }) : invoke("create_entry", { entry: entry(s, previous!) }))),
       ...after.map((s) => () => invoke("create_entry", { entry: entry(s, { categoryId, description: description.trim() }) })),
@@ -243,17 +247,16 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
     setError("");
     setFailed(false);
     setSaved(true);
-    setTimeout(() => onDone(now), SAVED_MS);
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") onDone(now);
-    else if (mode === "choose" && !lines.length && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    else if (!choice && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const k = e.key.toLowerCase();
       if (k === "a") choose("accept");
       else if (k === "s") choose("split");
       else if (k === "l") choose("leave");
-    } else if (mode !== "choose" && e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") save();
+    } else if (choice && choice !== "leave" && e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") save();
   };
 
   return (
@@ -264,19 +267,19 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
       </div>
       <div className="wt-thread" role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
         <Say text={`Nothing is logged from ${time(start)} to ${time(end)} (${formatHM(minutes)}). What did you do?`} mood={failed ? "problem" : "away"} />
-        {lines.map((l, i) => <div key={i} className="wt-me">{l}</div>)}
+        {choice && <div className="wt-me">{{ accept: "Accept it", split: "Split it", leave: "Leave it empty" }[choice]}</div>}
         {saved && <Say text="Saved. See you next time!" mood="saved" />}
       </div>
-      {mode === "choose" && !lines.length && (
+      {!choice && (
         <div className="wt-quick" role="group" aria-label="Gap choices">
           <button type="button" autoFocus className="wt-chip is-primary" onClick={() => choose("accept")}>Accept (A)</button>
           {canSplit && <button type="button" className="wt-chip" onClick={() => choose("split")}>Split (S)</button>}
           <button type="button" className="wt-chip" onClick={() => choose("leave")}>Leave empty (L)</button>
         </div>
       )}
-      {mode !== "choose" && !saved && (
+      {(choice === "accept" || choice === "split") && !saved && (
         <div className="wt-composer">
-          {mode === "split" && (
+          {choice === "split" && (
             <div className="wt-row">
               <span className="wt-label">New from</span>
               <input autoFocus className="wt-input" type="time" aria-label="New from" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -287,7 +290,7 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
             <div style={{ flex: 1 }}><Combo options={categories} value={categoryId} onChange={setCategoryId} /></div>
           </div>
           <div className="wt-row">
-            <input autoFocus={mode === "accept"} className="wt-input" aria-label="What did you do" placeholder="What did you do?" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input autoFocus={choice === "accept"} className="wt-input" aria-label="What did you do" placeholder="What did you do?" value={description} onChange={(e) => setDescription(e.target.value)} />
             <button type="button" className="wt-chip is-primary" onClick={save}>Save</button>
           </div>
           <ErrorLine error={error} retry={failed ? save : undefined} />
