@@ -32,6 +32,7 @@ function Tracker() {
           setEditing(false);
           load();
         }}
+        onBack={() => setEditing(false)}
       />
     );
   return <Calendar settings={settings} onSettings={() => setEditing(true)} />;

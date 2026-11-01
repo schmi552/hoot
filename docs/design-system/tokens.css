@@ -310,6 +310,7 @@
   --startup-gap: var(--space-sm);
   --onboarding-max-width: 760px;
   --time-field-width: 96px;
+  --lunch-field-width: 140px;
   --code-field-width: 120px;
 
   /* Calendar */

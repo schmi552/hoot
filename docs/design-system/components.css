@@ -206,6 +206,25 @@
 .wt-form { display: grid; gap: var(--space-sm); }
 .wt-row { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; }
 
+/* ---------- Settings. From the settings board. ---------- */
+.wt-settings { min-height: 100vh; display: flex; flex-direction: column; background: var(--shell-bg); color: var(--color-text); font: var(--text-body) / var(--leading-body) var(--font-body); }
+.wt-settings-head { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: var(--border-width) solid var(--color-border); }
+.wt-settings-head h1, .wt-section h2 { margin: 0; font-size: var(--text-title); font-weight: 600; }
+.wt-back { border: var(--border-width) solid var(--chip-border); border-radius: var(--radius-control); color: var(--chip-fg); }
+.wt-settings-body { display: flex; flex-wrap: wrap; gap: var(--space-xl); padding: var(--space-xl) var(--space-lg); align-items: flex-start; }
+.wt-settings-nav { flex: 1 1 200px; max-width: 240px; display: flex; flex-direction: column; gap: 2px; }
+.wt-settings-nav a { display: flex; align-items: center; min-height: var(--input-height); padding: 0 var(--space-md); color: var(--color-text); text-decoration: none; border-radius: var(--radius-field); }
+.wt-settings-nav a[aria-current="true"] { background: var(--color-surface-sunken); font-weight: 600; }
+.wt-settings-main { flex: 999 1 560px; min-width: 0; max-width: 820px; display: flex; flex-direction: column; gap: var(--space-2xl); }
+.wt-section { display: flex; flex-direction: column; gap: var(--space-lg); }
+.wt-settings-main > .wt-section { padding-bottom: var(--space-2xl); border-bottom: var(--border-width) solid var(--color-border); }
+.wt-settings-main > .wt-section:last-child { border-bottom: 0; }
+.wt-lunch { box-sizing: border-box; width: var(--lunch-field-width); }
+.wt-actions { display: flex; gap: var(--space-sm); justify-content: flex-end; }
+.wt-row-wrap { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: center; }
+.wt-notice-row { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: center; justify-content: space-between; }
+.wt-notice-date { display: flex; gap: var(--space-sm); align-items: center; }
+
 /* ---------- Onboarding and shared fields. From the onboarding board. ---------- */
 .wt-field { display: flex; flex-direction: column; gap: 6px; }
 .wt-field .wt-label { min-width: 0; }

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { needsStartDate, nextMonday, timeProblems, validate } from "./Settings";
+import { firstCheckIn, formatLunch, needsStartDate, nearestInterval, nextMonday, parseLunch, timeProblems, validate } from "./Settings";
 
 const ok = { workStart: "09:00", workEnd: "17:00", lunchStart: "12:00", lunchEnd: "13:00", tz: "UTC", intervalMinutes: 60, workdays: "12345" };
 
@@ -30,4 +30,21 @@ test("each time problem is named for its part", () => {
   expect(timeProblems({ ...ok, lunchEnd: "18:00" })).toMatchObject({ work: "" });
   expect(timeProblems({ ...ok, lunchEnd: "18:00" }).lunch).not.toBe("");
   expect(timeProblems({ ...ok, workStart: "" }).work).not.toBe("");
+});
+test("a saved interval shows the nearest chip", () => {
+  expect(nearestInterval(20)).toBe(15);
+  expect(nearestInterval(25)).toBe(30);
+  expect(nearestInterval(30)).toBe(30);
+  expect(nearestInterval(90)).toBe(60);
+});
+test("the first check-in is work start plus one interval", () => {
+  expect(firstCheckIn({ ...ok, workStart: "07:00", intervalMinutes: 30 })).toBe("07:30");
+  expect(firstCheckIn({ ...ok, workStart: "23:50", intervalMinutes: 30 })).toBe("");
+});
+test("the lunch box takes any length", () => {
+  expect(formatLunch({ ...ok, lunchStart: "12:00", lunchEnd: "12:30" })).toBe("12:00 · 30 min");
+  expect(parseLunch("12:00 · 50 min")).toEqual({ lunchStart: "12:00", lunchEnd: "12:50" });
+  expect(parseLunch("12:00 50")).toEqual({ lunchStart: "12:00", lunchEnd: "12:50" });
+  expect(parseLunch("12:00 · 0 min")).toBeNull();
+  expect(parseLunch("noon")).toBeNull();
 });

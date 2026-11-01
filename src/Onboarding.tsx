@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { ChipGroup, DayPicker, TimeField } from "./fields";
 import { Hoot } from "./Hoot";
 import { addMinutes, checkCategories, CategoryDraft } from "./categoryRows";
-import { defaults, Settings, timeProblems, validate } from "./Settings";
+import { defaults, hours, Settings, timeProblems, validate } from "./Settings";
 import { dateKey, expectedMinutes, ymdIn } from "./schedule/schedule";
 
 const COLOR_NAMES = ["Blue", "Orange", "Teal", "Purple", "Green", "Pink", "Amber", "Slate"];
@@ -24,8 +24,6 @@ function Step({ n, title, children }: { n: number; title: React.ReactNode; child
     </div>
   );
 }
-
-const hours = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
 
 /** The first-run card. It saves the first settings, the Categories and "Start at login", then calls `onDone`. */
 export function Onboarding({ onDone }: { onDone: () => void }) {

@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
-import { DAYS } from "./fields";
+import { addMinutes } from "./categoryRows";
+import { ChipGroup, DayPicker, TimeField } from "./fields";
 import { Appearance, Theme } from "./theme";
 import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
 
@@ -64,40 +65,121 @@ export function validate(s: Settings, start = "", today = ""): string {
   return "";
 }
 
-/** One form for first run (`saved` is null) and for later changes. A save starts today, or on the start date when Expected per day changes. */
-export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSaved: () => void }) {
-  const [s, setS] = useState<Settings>(saved ?? defaults());
+const INTERVALS = [15, 30, 45, 60];
+const minutesOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+
+/** "8h 30m" for a number of minutes. */
+export const hours = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
+
+/** The interval chip closest to `minutes`. A tie takes the smaller chip. */
+export const nearestInterval = (minutes: number) => INTERVALS.reduce((best, c) => (Math.abs(c - minutes) < Math.abs(best - minutes) ? c : best));
+
+/** "HH:MM" of the first check-in of a day: work start plus one interval. "" if it passes midnight. */
+export const firstCheckIn = (s: Settings) => addMinutes(s.workStart, s.intervalMinutes);
+
+/** The one-box lunch text, as in "12:00 · 30 min". */
+export const formatLunch = (s: Settings) => `${s.lunchStart} · ${minutesOf(s.lunchEnd) - minutesOf(s.lunchStart)} min`;
+
+/** Reads "HH:MM · N min" (the dot and "min" are optional) into the lunch times. Returns null if the text does not fit. */
+export function parseLunch(text: string): { lunchStart: string; lunchEnd: string } | null {
+  const m = /^(\d\d:\d\d)\s*[·,]?\s*(\d+)\s*(?:min)?$/.exec(text.trim());
+  if (!m) return null;
+  const lunchEnd = addMinutes(m[1], Number(m[2]));
+  return lunchEnd && Number(m[2]) > 0 ? { lunchStart: m[1], lunchEnd } : null;
+}
+
+/** Work time: the schedule fields. Nothing is saved until "Save changes". `key` the component on `saved` to reset it. */
+function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) {
+  const [s, setS] = useState(saved);
+  const [lunch, setLunch] = useState(formatLunch(saved));
+  const [message, setMessage] = useState("");
+  const today = dateKey(ymdIn(s.tz, Date.now() / 1000));
+  const [from, setFrom] = useState(nextMonday(today));
+  const dated = needsStartDate(s, saved);
+  const start = dated ? from : today;
+
+  const parsed = parseLunch(lunch);
+  const next = { ...s, ...(parsed ?? {}) };
+  const problem = parsed ? validate(next, start, today) : "Enter the lunch as HH:MM · N min.";
+  const time = timeProblems(next);
+  const expected = [expectedMinutes(saved), expectedMinutes(next)];
+  const reset = () => {
+    setS(saved);
+    setLunch(formatLunch(saved));
+    setMessage("");
+  };
+  const save = () => invoke("save_settings", { settings: next, start }).then(onSaved, (e) => setMessage(String(e)));
+
+  return (
+    <section id="work" className="wt-section">
+      <h2>Work time</h2>
+      <form
+        className="wt-section"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!problem) save();
+        }}
+      >
+        <div className="wt-fields">
+          <TimeField label="From" value={s.workStart} onChange={(workStart) => setS({ ...s, workStart })} invalid={!!time.work} />
+          <TimeField label="To" value={s.workEnd} onChange={(workEnd) => setS({ ...s, workEnd })} invalid={!!time.work} />
+          <div className="wt-field">
+            <label className="wt-label" htmlFor="s-lunch">Lunch</label>
+            <input id="s-lunch" className="wt-input wt-mono wt-lunch" value={lunch} onChange={(e) => setLunch(e.target.value)} aria-invalid={!parsed || !!time.lunch} />
+          </div>
+          <div className="wt-field">
+            <span className="wt-label">Check-in every</span>
+            <ChipGroup label="Interval" options={INTERVALS} value={nearestInterval(s.intervalMinutes)} onChange={(intervalMinutes) => setS({ ...s, intervalMinutes })} suffix=" min" />
+          </div>
+        </div>
+        <div className="wt-field">
+          <span className="wt-label">Workdays</span>
+          <DayPicker value={s.workdays} onChange={(workdays) => setS({ ...s, workdays })} />
+        </div>
+        {dated && (
+          <div role="status" className="wt-notice wt-notice-row">
+            <span>
+              {expected[0] === expected[1] ? (
+                "The Workdays change."
+              ) : (
+                <>Expected per day changes from <b className="wt-mono">{hours(expected[0])}</b> to <b className="wt-mono">{hours(expected[1])}</b>.</>
+              )}{" "}
+              Weeks before the start date keep the old value.
+            </span>
+            <label className="wt-notice-date">
+              From
+              <input className="wt-input wt-mono" type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} aria-invalid={start < today} />
+            </label>
+          </div>
+        )}
+        <p className="wt-error" role="alert">{message || problem}</p>
+        <div className="wt-actions">
+          <button type="button" className="wt-chip" onClick={reset}>Discard</button>
+          <button type="submit" className="wt-chip is-primary" disabled={!!problem}>Save changes</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+/** The settings screen. `onBack` leaves with no warning, so unsaved Work time edits are dropped. A save calls `onSaved`. */
+export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSaved: () => void; onBack: () => void }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
   const [look, setLook] = useState<Appearance>({ theme: "system", showMascot: true });
-  const today = dateKey(ymdIn(s.tz, Date.now() / 1000));
-  const [from, setFrom] = useState(nextMonday(today));
-  const dated = needsStartDate(s, saved);
-  const start = dated ? from : today;
 
   const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
   useEffect(() => void refresh(), []);
   useEffect(() => void invoke<Appearance>("get_appearance").then(setLook, fail), []);
   useEffect(() => void isEnabled().then(setAutostart, fail), []);
 
-  const set = (k: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setS({ ...s, [k]: k === "intervalMinutes" ? e.target.valueAsNumber : e.target.value });
-  const field = (label: string, k: keyof Settings, type = "time") => (
-    <label className="wt-row">
-      <span className="wt-label">{label}</span>
-      <input className="wt-input" type={type} value={s[k]} onChange={set(k)} required />
-    </label>
-  );
-
-  const problem = validate(s, start, today);
   const fail = (e: unknown) => setMessage(String(e));
   const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
   const setTheme = (theme: Theme) => invoke("set_theme", { theme }).then(() => setLook({ ...look, theme }), fail);
   const setShowMascot = (showMascot: boolean) => invoke("set_show_mascot", { show: showMascot }).then(() => setLook({ ...look, showMascot }), fail);
-  const save = () => invoke("save_settings", { settings: s, start }).then(onSaved, fail);
   const add = () =>
     invoke("add_category", { code: code.trim(), name: name.trim() }).then(() => {
       setCode("");
@@ -115,112 +197,104 @@ export function SettingsForm({ saved, onSaved }: { saved: Settings | null; onSav
       refresh();
     }, fail);
 
+  const firstCheck = firstCheckIn(saved);
   return (
-    <main className="wt-startup">
-      <h1>{saved ? "Settings" : "Welcome. Set up Work Tracker"}</h1>
-      <p>{saved ? "A change applies from the start date." : "You can change all of this later."}</p>
-      <form
-        className="wt-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!problem) save();
-        }}
-      >
-        {field("Work starts", "workStart")}
-        {field("Work ends", "workEnd")}
-        {field("Lunch starts", "lunchStart")}
-        {field("Lunch ends", "lunchEnd")}
-        {field("Popup every (minutes)", "intervalMinutes", "number")}
-        <fieldset className="wt-row">
-          <legend className="wt-label">Workdays</legend>
-          {DAYS.map(([digit, label]) => (
-            <label key={digit}>
-              <input
-                type="checkbox"
-                checked={s.workdays.includes(digit)}
-                onChange={(e) => setS({ ...s, workdays: DAYS.map(([d]) => d).filter((d) => (d === digit ? e.target.checked : s.workdays.includes(d))).join("") })}
-              />{" "}
-              {label}{" "}
-            </label>
-          ))}
-        </fieldset>
-        {dated && (
-          <label className="wt-row">
-            <span className="wt-label">From</span>
-            <input className="wt-input" type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} required />
-          </label>
-        )}
-        <p className="wt-error" role="alert">{problem}</p>
-        <button className="wt-chip is-primary" type="submit" disabled={!!problem}>
-          {saved ? "Save" : "Start"}
+    <div className="wt-settings">
+      <header className="wt-settings-head">
+        <button type="button" className="wt-icon-btn wt-back" aria-label="Back to calendar" onClick={onBack}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
         </button>
-      </form>
+        <h1>Settings</h1>
+      </header>
+      <div className="wt-settings-body">
+        <nav aria-label="Settings sections" className="wt-settings-nav">
+          <a href="#work" aria-current="true">Work time</a>
+          <a href="#cats">Categories</a>
+          <a href="#look">Appearance and startup</a>
+          <a href="#back">Backups</a>
+        </nav>
+        <main className="wt-settings-main">
+          <WorkTime key={JSON.stringify(saved)} saved={saved} onSaved={onSaved} />
 
-      <label className="wt-row">
-        <span className="wt-label">Start at login</span>
-        <input type="checkbox" checked={autostart} onChange={(e) => toggleAutostart(e.target.checked)} />
-      </label>
-
-      <label className="wt-row">
-        <span className="wt-label">Theme</span>
-        <select className="wt-input" value={look.theme} onChange={(e) => setTheme(e.target.value as Theme)}>
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-      <label className="wt-row">
-        <span className="wt-label">Show the mascot</span>
-        <input type="checkbox" checked={look.showMascot} onChange={(e) => setShowMascot(e.target.checked)} />
-      </label>
-
-      <h2>Categories</h2>
-      <ul>
-        {categories.map((c) => (
-          <li key={c.id}>
-            <input
-              key={c.code}
-              className="wt-input"
-              aria-label={`Code of ${c.name}`}
-              size={8}
-              defaultValue={c.code}
-              onBlur={(e) => e.target.value.trim() !== c.code && change(c, { code: e.target.value })}
-            />{" "}
-            {c.name}{" "}
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <button
-                key={n}
-                type="button"
-                aria-label={`Color ${n} for ${c.name}`}
-                aria-pressed={c.color === n}
-                onClick={() => change(c, { color: n })}
-                style={{
-                  width: 16,
-                  height: 16,
-                  borderRadius: "50%",
-                  border: c.color === n ? "2px solid var(--color-text)" : "1px solid transparent",
-                  background: `var(--cat-${n}-solid)`,
-                }}
+          <section id="cats" className="wt-section">
+            <h2>Categories</h2>
+            <ul>
+              {categories.map((c) => (
+                <li key={c.id}>
+                  <input
+                    key={c.code}
+                    className="wt-input"
+                    aria-label={`Code of ${c.name}`}
+                    size={8}
+                    defaultValue={c.code}
+                    onBlur={(e) => e.target.value.trim() !== c.code && change(c, { code: e.target.value })}
+                  />{" "}
+                  {c.name}{" "}
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-label={`Color ${n} for ${c.name}`}
+                      aria-pressed={c.color === n}
+                      onClick={() => change(c, { color: n })}
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: "50%",
+                        border: c.color === n ? "2px solid var(--color-text)" : "1px solid transparent",
+                        background: `var(--cat-${n}-solid)`,
+                      }}
+                    />
+                  ))}{" "}
+                  <button className="wt-chip" onClick={() => remove(c)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+            <div className="wt-startup-actions">
+              <input className="wt-input" aria-label="New Category code" size={8} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
+              <input
+                className="wt-input"
+                aria-label="New Category"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && name.trim() && add()}
               />
-            ))}{" "}
-            <button className="wt-chip" onClick={() => remove(c)}>Remove</button>
-          </li>
-        ))}
-      </ul>
-      <div className="wt-startup-actions">
-        <input className="wt-input" aria-label="New Category code" size={8} placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} />
-        <input
-          className="wt-input"
-          aria-label="New Category"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && name.trim() && add()}
-        />
-        <button className="wt-chip" onClick={add} disabled={!name.trim()}>Add Category</button>
-      </div>
-      <p className="wt-error" role="alert">{message}</p>
+              <button className="wt-chip" onClick={add} disabled={!name.trim()}>Add Category</button>
+            </div>
+            <p className="wt-error" role="alert">{message}</p>
+          </section>
 
-      <button className="wt-chip" onClick={() => invoke("show_backups_folder")}>Show backups folder</button>
-    </main>
+          <section id="look" className="wt-section">
+            <h2>Appearance and startup</h2>
+            <div className="wt-row-wrap">
+              <span className="wt-label">Theme</span>
+              <div role="group" aria-label="Theme" className="wt-chips">
+                {(["system", "light", "dark"] as Theme[]).map((t) => (
+                  <button key={t} type="button" className="wt-chip" aria-pressed={look.theme === t} onClick={() => setTheme(t)}>
+                    {t[0].toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="wt-check">
+              <input type="checkbox" checked={autostart} onChange={(e) => toggleAutostart(e.target.checked)} />
+              Open Work Tracker when I log in
+            </label>
+            <label className="wt-check">
+              <input type="checkbox" checked={look.showMascot} onChange={(e) => setShowMascot(e.target.checked)} />
+              Show the mascot
+            </label>
+            {firstCheck && <span className="wt-hint">First check-in today at {firstCheck}.</span>}
+          </section>
+
+          <section id="back" className="wt-section">
+            <h2>Backups</h2>
+            <div>
+              <button className="wt-chip" onClick={() => invoke("show_backups_folder")}>Show backups folder</button>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
   );
 }
