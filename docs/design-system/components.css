@@ -142,7 +142,8 @@
   box-shadow: var(--listbox-shadow);
   z-index: 5;
 }
-.wt-combo li { padding: var(--listbox-option-py) var(--space-sm); cursor: pointer; }
+.wt-combo li { display: flex; align-items: center; gap: var(--space-sm); padding: var(--listbox-option-py) var(--space-sm); cursor: pointer; }
+.wt-combo .wt-dot { width: 8px; height: 8px; }
 .wt-combo li.is-active {
   background: var(--listbox-option-active-bg);
   outline: var(--border-width) solid var(--listbox-option-active-ring);

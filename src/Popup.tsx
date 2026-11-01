@@ -4,16 +4,16 @@ import { createContext, KeyboardEvent, useContext, useEffect, useId, useRef, use
 import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
 import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
-import { Hoot } from "./Hoot";
+import { Hoot, Mood } from "./Hoot";
 import type { Settings } from "./Settings";
 import type { Appearance } from "./theme";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
-type Category = { id: number; name: string };
+type Category = { id: number; code: string; name: string; color: number };
 type Ask = { now: number; settings: Settings; spans: Span[]; last: Entry | null; recents: Entry[]; categories: Category[]; today: string; askLocation: boolean; gap: boolean; previous: Entry | null; showMascot: boolean };
 type Line = { me: boolean; text: string };
 
-const SNOOZE_MINUTES = 5;
+const SAVED_MS = 1500; // how long the saved state stays
 const HISTORY_DAYS = 30;
 const MAC = navigator.platform.startsWith("Mac");
 const STILL_KEY = MAC ? "Cmd+Enter" : "Ctrl+Enter";
@@ -25,15 +25,15 @@ const ShowMascot = createContext(true);
 export function Popup() {
   const [ask, setAsk] = useState<Ask | null>(null);
   const asking = useRef(false);
-  const lastPrompt = useRef(0); // epoch seconds of the last answer, skip or snooze; lost on quit
+  const lastPrompt = useRef(0); // epoch seconds of the last answer; a skip leaves it alone, so the next tick asks again; lost on quit
 
   const show = (a: Ask | null) => {
     asking.current = !!a;
     setAsk(a);
     invoke("set_popup_visible", { visible: !!a });
   };
-  const finish = (promptedUtc: number) => {
-    lastPrompt.current = promptedUtc;
+  const finish = (promptedUtc?: number) => {
+    if (promptedUtc !== undefined) lastPrompt.current = promptedUtc;
     show(null);
   };
 
@@ -73,7 +73,7 @@ export function Popup() {
   );
 }
 
-function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void }) {
+function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => void }) {
   const { now, settings, spans, last, recents, categories, today } = ask;
   const asked = useRef(ask.askLocation); // the popup began with the location question, so the thread keeps its answer
   const [askLocation, setAskLocation] = useState(ask.askLocation);
@@ -90,6 +90,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
   const thread = useRef<HTMLDivElement>(null);
   const time = (t: number) => new Date(t * 1000).toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" });
   const category = categories.find((c) => c.id === categoryId);
+  const [savedCode, setSavedCode] = useState("");
 
   const question = last ? `Still on "${last.description}"?` : `What did you do since ${time(spans[0].startUtc)}?`;
   useEffect(() => void (thread.current!.scrollTop = thread.current!.scrollHeight), [lines, saved, place]);
@@ -100,6 +101,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
     if (!source.categoryId) return setError("Pick a Category.");
     const answer = still ? "Yes, still" : `${source.description} (${category?.name})`;
     again.current = still;
+    setFailed(false); // a retry puts Hoot back to Asking until the write fails again
     const create = (s: Span) => invoke("create_entry", { entry: { id: 0, categoryId: source.categoryId, description: source.description, startUtc: s.startUtc, endUtc: s.endUtc, tz: settings.tz } });
     try {
       // Lunch can split the span in two: the first part extends the last Entry, the rest are new.
@@ -113,10 +115,10 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
     }
     emit("entries-changed");
     setError("");
-    setFailed(false);
     setLines([{ me: true, text: answer }]);
+    setSavedCode(categories.find((c) => c.id === source.categoryId)?.code ?? "");
     setSaved(true);
-    setTimeout(() => onDone(now), 1200);
+    setTimeout(() => onDone(now), SAVED_MS);
   };
 
   const setLocation = async (location: "home" | "office") => {
@@ -131,34 +133,32 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
     setAskLocation(false);
   };
 
-  const snooze = () => onDone(now + SNOOZE_MINUTES * 60 - settings.intervalMinutes * 60);
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") onDone(now);
+    if (e.key === "Escape") saved ? onDone(now) : onDone(); // a skip is not an answer
     else if (askLocation) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key.toLowerCase() === "h") setLocation("home");
       else if (e.key.toLowerCase() === "o") setLocation("office");
-    } else if (e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") (e.ctrlKey || e.metaKey) ? last && save(true) : save(false);
+    } else if (e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") (MAC ? e.metaKey : e.ctrlKey) ? last && save(true) : save(false);
   };
 
   return (
     <div className="wt-popup wt-popup--window" role="dialog" aria-label="Work Tracker check-in" tabIndex={0} onKeyDown={onKeyDown} >
       <div className="wt-head">
         <b>Work Tracker</b>
-        <span className="wt-sub">{time(now)} · Esc skip</span>
+        <span className="wt-sub">{time(now)} · Esc {saved ? "close" : "skip"}</span>
       </div>
       <div className="wt-thread" ref={thread} role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
         {asked.current && <Say text="Are you working from home or in the office today?" />}
         {asked.current && place && <div className="wt-me">{place}</div>}
-        {!askLocation && <Say text={question} />}
+        {!askLocation && <Say text={question} mood={failed ? "problem" : "asking"} />}
         {lines.map((l, i) => (l.me ? <div key={i} className="wt-me">{l.text}</div> : <Say key={i} text={l.text} />))}
-        {saved && <Say text="Saved. See you next time!" />}
+        {saved && <Say text={`Saved: ${time(spans[0].startUtc)} to ${time(spans[spans.length - 1].endUtc)}${savedCode ? ` on ${savedCode}` : ""}. See you at the next tick!`} mood="saved" />}
       </div>
       {askLocation ? (
         <div className="wt-quick" role="group" aria-label="Workday location">
           <button type="button" autoFocus className="wt-chip is-primary" onClick={() => setLocation("home")}>Home (H)</button>
           <button type="button" className="wt-chip is-primary" onClick={() => setLocation("office")}>Office (O)</button>
-          <button type="button" className="wt-chip" onClick={snooze}>Snooze {SNOOZE_MINUTES} min</button>
           <ErrorLine error={error} />
         </div>
       ) : !saved && (
@@ -170,7 +170,6 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void
                 {r.description}
               </button>
             ))}
-            <button type="button" className="wt-chip" onClick={snooze}>Snooze {SNOOZE_MINUTES} min</button>
           </div>
           <div className="wt-composer">
             <div className="wt-row">
@@ -199,7 +198,7 @@ function fail(e: unknown, setError: (m: string) => void, setFailed: (f: boolean)
 type Part = { until: string; description: string; categoryId: number }; // `until` is "HH:MM"; the last part has none
 
 /** The popup for a Gap: accept it as one Entry, split it into parts, or leave it empty. Nothing is saved until the user answers. */
-function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => void }) {
+function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => void }) {
   const { now, settings, spans, previous, recents, categories } = ask;
   const [mode, setMode] = useState<"choose" | "accept" | "split">("choose");
   const firstCategory = recents[0]?.categoryId ?? categories[0]?.id ?? 0;
@@ -241,7 +240,7 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc: number) => v
     setError("");
     setFailed(false);
     setSaved(true);
-    setTimeout(() => onDone(now), 1200);
+    setTimeout(() => onDone(now), SAVED_MS);
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -325,11 +324,11 @@ export function ErrorLine({ error, retry }: { error: string; retry?: () => void 
 }
 
 /** A line from the mascot. */
-function Say({ text }: { text: string }) {
+function Say({ text, mood }: { text: string; mood?: Mood }) {
   const showMascot = useContext(ShowMascot);
   return (
     <div className="wt-bot">
-      {showMascot && <Hoot px={3} />}
+      <Hoot px={3} mood={mood} show={showMascot} />
       <div className="wt-bubble">{text}</div>
     </div>
   );
@@ -337,14 +336,16 @@ function Say({ text }: { text: string }) {
 
 /** A Category field that holds the chosen Category. Its list opens upward. */
 function Combo({ options, value, onChange }: { options: Category[]; value: number; onChange: (id: number) => void }) {
-  const name = options.find((o) => o.id === value)?.name ?? "";
+  const label = (o: Category) => (o.code ? `${o.code} ${o.name}` : o.name);
+  const chosen = options.find((o) => o.id === value);
+  const name = chosen ? label(chosen) : "";
   const id = useId();
   const [text, setText] = useState(name);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   useEffect(() => setText(name), [name]);
-  const shown = text === name ? options : options.filter((o) => o.name.toLowerCase().includes(text.toLowerCase()));
-  const pick = (o: Category) => { onChange(o.id); setText(o.name); setOpen(false); };
+  const shown = text === name ? options : options.filter((o) => label(o).toLowerCase().includes(text.toLowerCase()));
+  const pick = (o: Category) => { onChange(o.id); setText(label(o)); setOpen(false); };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -360,7 +361,7 @@ function Combo({ options, value, onChange }: { options: Category[]; value: numbe
       {open && shown.length > 0 && (
         <ul id={id} role="listbox">
           {shown.map((o, i) => (
-            <li key={o.id} role="option" aria-selected={i === active} className={i === active ? "is-active" : ""} onMouseDown={(e) => { e.preventDefault(); pick(o); }}>{o.name}</li>
+            <li key={o.id} role="option" aria-selected={i === active} className={i === active ? "is-active" : ""} onMouseDown={(e) => { e.preventDefault(); pick(o); }}><span className="wt-dot" style={{ "--dot": `var(--cat-${o.color}-solid)` } as React.CSSProperties} />{label(o)}</li>
           ))}
         </ul>
       )}

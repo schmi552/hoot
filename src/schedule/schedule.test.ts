@@ -115,7 +115,7 @@ test("a popup is due when a full interval has passed since the last Entry", () =
   expect(popupDue(hours, at(11), entries, 0)).toEqual([span(10, 11)]);
 });
 
-test("a skipped or snoozed popup delays the next one", () => {
+test("a skipped or answered popup delays the next one", () => {
   expect(popupDue(hours, at(11), [span(9, 10)], at(10, 30))).toBeNull();
   expect(popupDue(hours, at(11, 30), [span(9, 10)], at(10, 30))).toEqual([span(10, 11, 30)]);
 });
