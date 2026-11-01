@@ -11,9 +11,10 @@ import "@fullcalendar/react/themes/classic/palette.css";
 import { useEffect, useRef, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, resizedEnd, settingsOn, SettingsRow, Span, STEP, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
+import { daysIn, entryText, gridRange, hiddenDays } from "./schedule/week";
 import { expandMeetings, MeetingException, MeetingOccurrence, MeetingSeries, sourceText } from "./schedule/meetings";
 import { ExportDialog } from "./Export";
 import { ImportDialog } from "./Import";
@@ -22,7 +23,7 @@ import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
-type Category = { id: number; name: string };
+type Category = { id: number; code: string; name: string; color: number };
 type Slot = { start: Date; end: Date };
 /** One step of the history: `from` becomes `to`. A null side is an Entry that does not exist. */
 type Change = { from: Entry | null; to: Entry | null };
@@ -38,6 +39,7 @@ type AbsenceForm = { kind: AbsenceKind; label: string; allDay: boolean; from: st
 export function Calendar({ settings, onSettings }: { settings: Settings; onSettings: () => void }) {
   const calendar = useRef<CalendarRef>(null);
   const [range, setRange] = useState<[number, number] | null>(null);
+  const [isWeek, setIsWeek] = useState(true);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Record<string, string>>({}); // date -> "home" | "office"
@@ -89,6 +91,13 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
   useEffect(() => void invoke<MeetingException[]>("list_meeting_exceptions").then(setExceptions), [reload]);
   useEffect(() => void invoke<Absence[]>("list_absences").then(setAbsences), [reload]);
   const meetings = range ? expandMeetings(series, exceptions, range[0], range[1]) : [];
+  const away = absenceSpans(absences, settings.tz);
+  // Only the Workdays show, and a non-workday that holds an item; the grid runs over the work hours plus one hour each side and widens for items outside.
+  const hidden = range && isWeek ? hiddenDays(settings.tz, daysIn(settings.tz, range[0], range[1]), (d) => isWorkday((rows.length ? settingsOn(rows, d) : settings).workdays, d), [...entries, ...meetings, ...away]) : [];
+  const timed = [...entries, ...meetings, ...absences.filter((a) => a.startUtc !== null).map((a) => ({ startUtc: a.startUtc!, endUtc: a.endUtc! }))];
+  const hours = gridRange(settings.workStart, settings.workEnd, settings.tz, timed);
+  const clock = (sec: number) => new Intl.DateTimeFormat("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(sec * 1000);
+  const hourText = (h: number) => `${String(h).padStart(2, "0")}:00:00`;
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(t);
@@ -257,12 +266,12 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
 
   // The header date is the start of the day in the zone of the settings.
   const dayOf = (d: Date) => ymdIn(settings.tz, secs(d));
-  const away = absenceSpans(absences, settings.tz);
   const expected = (d: Date) => expectedOn(rows.length ? settingsOn(rows, dayOf(d)) : settings, dayOf(d), away);
   const logged = (d: Date) => loggedMinutes(entries, ...dayBoundsIn(settings.tz, dayOf(d)));
   const where = (d: Date) => ({ home: "Home", office: "Office" })[locations[dateKey(dayOf(d))]] ?? "";
   const daySub = (d: Date) => `${formatHM(logged(d))} / ${formatHM(expected(d))}${where(d) && ` · ${where(d)}`}`;
   const name = (id: number | null) => categories.find((c) => c.id === id)?.name ?? "";
+  const colorOf = (id: number) => categories.find((c) => c.id === id)?.color ?? 8;
 
   return (
     <main
@@ -353,13 +362,19 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, classicTheme]}
         timeZone={settings.tz}
         initialView="timeGridWeek"
+        hiddenDays={hidden}
+        slotMinTime={hourText(hours.minHour)}
+        slotMaxTime={hourText(hours.maxHour)}
+        slotMinHeight={32}
+        slotHeaderInterval="01:00"
+        slotHeaderFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+        slotLaneClass={(i) => i.isMinor && "wt-slot-half"}
         headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridWeek,dayGridMonth" }}
         firstDay={1}
         nowIndicator
         height="auto"
         slotDuration={{ minutes: SLOT_MINUTES }}
         snapDuration="00:15:00"
-        scrollTime={settings.workStart + ":00"}
         selectable
         selectMirror
         selectOverlap={(ev) => !!ev.extendedProps.meeting || !!ev.extendedProps.absence} // a Meeting or an Absence never blocks an Entry
@@ -397,14 +412,19 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           } else if (i.view.type === "timeGridWeek") open({ start: i.start, end: i.end });
           else i.view.calendar.unselect(); // a drag across month cells is not an Entry
         }}
-        datesSet={(i) => setRange([secs(i.start), secs(i.end)])}
+        datesSet={(i) => {
+          const week = i.view.type === "timeGridWeek";
+          setIsWeek(week);
+          setRange(week ? [secs(i.view.currentStart), secs(i.view.currentEnd)] : [secs(i.start), secs(i.end)]); // a hidden day must still load its items
+        }}
         events={[
           ...entries.map((e) => ({
             id: String(e.id),
             title: `${name(e.categoryId)}: ${e.description}`,
             start: new Date(e.startUtc * 1000),
             end: new Date(e.endUtc * 1000),
-            classNames: e.id === selected ? ["wt-selected"] : [],
+            className: `wt-entry wt-cat-${colorOf(e.categoryId)}${e.id === selected ? " wt-selected" : ""}`,
+            extendedProps: { entry: e },
           })),
           ...meetings.map((m) => ({
             id: `m${m.seriesId}-${m.startUtc}`,
@@ -412,19 +432,49 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
             start: new Date(m.startUtc * 1000),
             end: new Date(m.endUtc * 1000),
             editable: false,
-            classNames: ["wt-meeting"],
-            extendedProps: { meeting: m },
+            className: `wt-meeting wt-cat-${m.categoryId === null ? "none" : colorOf(m.categoryId)}`,
+            extendedProps: { meeting: m, repeats: !!series.find((x) => x.id === m.seriesId)?.rrule },
           })),
           ...absences.map((a) => ({
             id: `a${a.id}`,
             title: absenceTitle(a),
             ...(a.startDate ? { start: a.startDate, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), allDay: true } : { start: new Date(a.startUtc! * 1000), end: new Date(a.endUtc! * 1000) }),
             editable: false,
-            classNames: ["wt-absence"],
+            className: "wt-absence",
             extendedProps: { absence: a },
           })),
           ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}
+        eventContent={(i) => {
+          if (i.view.type !== "timeGridWeek") return true; // the month view keeps its default text until ticket 21
+          const { entry, meeting, absence, repeats } = i.event.extendedProps as { entry?: Entry; meeting?: MeetingOccurrence; absence?: Absence; repeats?: boolean };
+          const [start, end] = [secs(i.event.start!), secs(i.event.end!)]; // during a drag these are the new times
+          const time = `${clock(start)}–${clock(end)}`;
+          if (entry) {
+            const cat = categories.find((c) => c.id === entry.categoryId);
+            const t = entryText((end - start) / 60, entry.description || cat?.name || "", `${cat?.code ? cat.code + " · " : ""}${time}`);
+            return (
+              <div className={t.compact ? "wt-entry-text is-compact" : "wt-entry-text"}>
+                <b>{t.title}</b>
+                {t.meta && <span>{t.meta}</span>}
+                {entry.id === selected && <span className="wt-grip" />}
+              </div>
+            );
+          }
+          if (meeting) {
+            return (
+              <div className="wt-meeting-text">
+                <b>{meeting.title}</b>
+                {repeats && (
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Repeats">
+                    <path d="M2.5 7a5.5 5.5 0 0 1 9.6-3.2L13.5 5M13.5 2v3h-3M13.5 9a5.5 5.5 0 0 1-9.6 3.2L2.5 11M2.5 14v-3h3" />
+                  </svg>
+                )}
+              </div>
+            );
+          }
+          return <span className="wt-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
+        }}
         dayHeaderContent={(i) => (
           <>
             <div>{i.text}</div>

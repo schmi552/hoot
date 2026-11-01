@@ -301,16 +301,45 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 }
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
 .wt-selected { outline: var(--selected-ring); outline-offset: var(--selected-ring-offset); }
-.wt-meeting {
+/* Event kinds. A Category class sets the three colors; a Meeting without a Category is gray. */
+.wt-cat-1 { --cat-tint: var(--cat-1-tint); --cat-solid: var(--cat-1-solid); --cat-ink: var(--cat-1-ink); }
+.wt-cat-2 { --cat-tint: var(--cat-2-tint); --cat-solid: var(--cat-2-solid); --cat-ink: var(--cat-2-ink); }
+.wt-cat-3 { --cat-tint: var(--cat-3-tint); --cat-solid: var(--cat-3-solid); --cat-ink: var(--cat-3-ink); }
+.wt-cat-4 { --cat-tint: var(--cat-4-tint); --cat-solid: var(--cat-4-solid); --cat-ink: var(--cat-4-ink); }
+.wt-cat-5 { --cat-tint: var(--cat-5-tint); --cat-solid: var(--cat-5-solid); --cat-ink: var(--cat-5-ink); }
+.wt-cat-6 { --cat-tint: var(--cat-6-tint); --cat-solid: var(--cat-6-solid); --cat-ink: var(--cat-6-ink); }
+.wt-cat-7 { --cat-tint: var(--cat-7-tint); --cat-solid: var(--cat-7-solid); --cat-ink: var(--cat-7-ink); }
+.wt-cat-8 { --cat-tint: var(--cat-8-tint); --cat-solid: var(--cat-8-solid); --cat-ink: var(--cat-8-ink); }
+.wt-cat-none { --cat-solid: var(--color-text-muted); }
+.wt-calendar .wt-entry {
+  background: var(--cat-tint);
+  color: var(--cat-ink);
+  border: var(--entry-border-width) solid var(--cat-solid);
+  border-radius: var(--entry-radius);
+  overflow: hidden;
+}
+.wt-calendar :is(.wt-entry, .wt-meeting, .wt-absence) > * { color: inherit; } /* the theme sets a color on the inner element */
+.wt-entry-text { display: flex; flex-direction: column; gap: 1px; padding: var(--space-xs) var(--space-sm); font-size: var(--text-body); line-height: 1.25; text-align: left; }
+.wt-entry-text.is-compact { padding: 0 var(--space-xs); font-size: var(--text-caption); }
+.wt-entry-text b, .wt-entry-text span, .wt-meeting-text b, .wt-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wt-entry-text span { font-size: var(--text-caption); }
+.wt-grip { position: absolute; left: 50%; bottom: 3px; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--cat-ink); }
+.wt-calendar .wt-meeting {
   background: var(--meeting-bg);
   color: var(--meeting-fg);
-  border: var(--meeting-border-width) var(--meeting-border-style) var(--calendar-accent);
+  border: var(--meeting-border-width) var(--meeting-border-style) var(--cat-solid);
+  border-radius: var(--entry-radius);
 }
-.wt-absence {
+.wt-meeting-text { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-xs); padding: 0 var(--space-xs); font-size: var(--text-caption); line-height: 1.1; }
+.wt-meeting-text svg { flex: none; }
+.wt-calendar .wt-absence {
   background: repeating-linear-gradient(135deg, var(--absence-stripe) 0 var(--hatch-width), var(--absence-bg) var(--hatch-width) calc(2 * var(--hatch-width)));
   color: var(--absence-fg);
   border: var(--border-width) solid var(--calendar-border);
+  border-radius: var(--entry-radius);
 }
+.wt-label { display: inline-block; max-width: 100%; box-sizing: border-box; margin: var(--space-xs); padding: 1px var(--space-sm); border-radius: var(--radius-control); background: var(--absence-label-bg); color: var(--color-text); font-size: var(--text-caption); }
+.wt-calendar .wt-slot-half { border-top-color: transparent; }
 .wt-menu { display: inline-flex; gap: var(--space-sm); }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }
 
