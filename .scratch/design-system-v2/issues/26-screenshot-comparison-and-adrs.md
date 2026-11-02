@@ -8,13 +8,13 @@ Spec story: 123.
 
 **Blocked by:** 08 to 25
 
-**Status:** done
+**Status:** ready-for-agent
 
-- [x] The procedure file lists every screen and state per board.
-- [x] Every item has a result for light and dark on macOS and Windows.
-- [x] Each difference is fixed or has its own ticket.
-- [x] The user approved the new ADR, and it is written.
-- [x] ADR 0005 and ADR 0006 have their notes.
+- [ ] The procedure file lists every screen and state per board.
+- [ ] Every item has a result for light and dark on macOS and Windows.
+- [ ] Each difference is fixed or has its own ticket.
+- [ ] The user approved the new ADR, and it is written.
+- [ ] ADR 0005 and ADR 0006 have their notes.
 
 ## Comments
 
