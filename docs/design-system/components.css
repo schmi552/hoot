@@ -433,7 +433,7 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-dot-btn[aria-pressed="true"] { outline: 2px solid var(--color-text); outline-offset: 2px; }
 .wt-swatches { position: absolute; left: 8px; top: 46px; z-index: 5; display: grid; grid-template-columns: repeat(4, 32px); gap: var(--space-sm); padding: 10px; background: var(--listbox-bg); border: var(--border-width) solid var(--listbox-border); border-radius: var(--radius-field); box-shadow: var(--p-shadow-menu); }
 .wt-swatches .wt-dot { width: 32px; height: 32px; }
-.wt-swatches .wt-dot-btn:disabled { opacity: 0.45; cursor: default; }
+.wt-swatches .wt-dot-btn.is-used { opacity: 0.45; }
 .wt-swatches .wt-dot-btn[aria-pressed="true"] { border: 3px solid var(--color-surface); box-sizing: border-box; }
 .wt-swatches .wt-hint { grid-column: 1 / -1; }
 .wt-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-md); }
