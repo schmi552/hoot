@@ -70,6 +70,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   const [absenceForm, setAbsenceForm] = useState<AbsenceForm | null>(null);
   const [pickedAbsence, setPickedAbsence] = useState<Absence | null>(null);
   const [menu, setMenu] = useState(false);
+  const [jump, setJump] = useState(false); // the date picker under the title
   const [more, setMore] = useState(false); // the "..." menu: Export, Settings, Quit
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
@@ -241,6 +242,12 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     return () => window.removeEventListener("click", close);
   }, [menu]);
   useEffect(() => {
+    if (!jump) return;
+    const close = (e: MouseEvent) => (e.target as HTMLElement).closest(".wt-menu-anchor") || setJump(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [jump]);
+  useEffect(() => {
     if (!more) return;
     const close = (e: MouseEvent) => (e.target as HTMLElement).closest(".wt-menu-anchor") || setMore(false);
     window.addEventListener("click", close);
@@ -387,7 +394,14 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           <button className="wt-icon-btn" aria-label={isWeek ? "Previous week" : "Previous month"} onClick={() => calendar.current?.getApi().prev()}><Chevron dir="left" /></button>
           <button className="wt-chip" onClick={() => calendar.current?.getApi().today()}>Today (T)</button>
           <button className="wt-icon-btn" aria-label={isWeek ? "Next week" : "Next month"} onClick={() => calendar.current?.getApi().next()}><Chevron dir="right" /></button>
-          <h1 className="wt-toolbar-title">{title}</h1>
+          <span className="wt-menu-anchor">
+            <h1 className="wt-toolbar-title"><button className="wt-title-btn" aria-haspopup="dialog" aria-expanded={jump} title="Go to a date" onClick={() => setJump(!jump)}>{title}</button></h1>
+            {jump && (
+              <div className="wt-popmenu" role="dialog" aria-label="Go to a date" onKeyDown={(e) => e.key === "Escape" && setJump(false)}>
+                <input className="wt-input" type="date" autoFocus aria-label="Date" defaultValue={range ? dateKey(ymdIn(settings.tz, (range[0] + range[1]) / 2)) : ""} onChange={(e) => e.target.value && (calendar.current?.getApi().gotoDate(e.target.value), setJump(false))} />
+              </div>
+            )}
+          </span>
         </div>
         <div className="wt-toolbar-group">
           <div role="group" aria-label="View" className="wt-segmented">
@@ -395,7 +409,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             <button className="wt-chip" title="Month (M)" aria-pressed={!isWeek} onClick={() => showView(false)}>Month</button>
           </div>
           <span className="wt-menu-anchor">
-            <button className="wt-plus" aria-label="New" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
+            <button className="wt-chip is-primary" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>+ New</button>
             {menu && (
               <div className="wt-popmenu wt-plus-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setMenu(false)}>
                 <button className="wt-chip" role="menuitem" autoFocus onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>
