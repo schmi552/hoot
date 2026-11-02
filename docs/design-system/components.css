@@ -374,6 +374,12 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-calendar .wt-lunchband { background: var(--calendar-lunch-bg); opacity: 1; }
 .wt-calendar .wt-lunchband::after { content: "Lunch"; display: block; padding: var(--space-xs) var(--space-sm); font-size: var(--text-caption); color: var(--calendar-fg-muted); }
 .wt-calendar .wt-absence-bg { background: repeating-linear-gradient(135deg, var(--absence-stripe) 0 var(--hatch-width), var(--absence-bg) var(--hatch-width) calc(2 * var(--hatch-width))); opacity: 0.6; }
+.wt-segmented { display: inline-flex; }
+.wt-segmented .wt-chip { border-radius: 0; }
+.wt-segmented .wt-chip + .wt-chip { margin-inline-start: calc(-1 * var(--border-width)); }
+.wt-segmented .wt-chip:first-child { border-start-start-radius: var(--chip-radius); border-end-start-radius: var(--chip-radius); }
+.wt-segmented .wt-chip:last-child { border-start-end-radius: var(--chip-radius); border-end-end-radius: var(--chip-radius); }
+.wt-segmented .wt-chip:hover, .wt-segmented .wt-chip[aria-pressed="true"] { position: relative; } /* the shared border shows the colour */
 .wt-menu { display: inline-flex; gap: var(--space-sm); }
 .wt-day-short .wt-sub { color: var(--calendar-warning); font-weight: 600; }
 

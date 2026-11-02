@@ -383,11 +383,11 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           <h1 className="wt-toolbar-title">{title}</h1>
         </div>
         <div className="wt-toolbar-group">
-          <div role="group" aria-label="View" className="wt-menu">
-            <button className="wt-chip" aria-pressed={isWeek} onClick={() => showView(true)}>Week (W)</button>
-            <button className="wt-chip" aria-pressed={!isWeek} onClick={() => showView(false)}>Month (M)</button>
+          <div role="group" aria-label="View" className="wt-segmented">
+            <button className="wt-chip" title="Week (W)" aria-pressed={isWeek} onClick={() => showView(true)}>Week</button>
+            <button className="wt-chip" title="Month (M)" aria-pressed={!isWeek} onClick={() => showView(false)}>Month</button>
           </div>
-          <button className="wt-chip" onClick={() => setExporting(true)}>Export …</button>
+          <button className="wt-icon-btn" aria-label="Export" title="Export" onClick={() => setExporting(true)}><Download /></button>
           <span className="wt-menu-anchor">
             <button className="wt-plus" aria-label="New" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
             {menu && (
@@ -782,6 +782,14 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
   return (
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d={dir === "left" ? "M10 3 5 8l5 5" : "M6 3l5 5-5 5"} />
+    </svg>
+  );
+}
+
+function Download() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
     </svg>
   );
 }
