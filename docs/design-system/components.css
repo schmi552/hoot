@@ -232,7 +232,7 @@ html, body { margin: 0; background: var(--color-surface); color: var(--color-tex
 .wt-settings { min-height: 100vh; display: flex; flex-direction: column; background: var(--shell-bg); color: var(--color-text); font: var(--text-body) / var(--leading-body) var(--font-body); }
 .wt-settings-head { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: var(--border-width) solid var(--color-border); }
 .wt-section h2 { margin: 0; font-size: var(--text-title); font-weight: 600; }
-.wt-enter { border: var(--border-width) solid var(--chip-border); border-radius: var(--radius-control); color: var(--chip-fg); }
+.wt-enter { display: inline-flex; align-items: center; gap: var(--space-xs); }
 .wt-enter:not(:disabled) { background: var(--chip-bg-on); border-color: var(--chip-bg-on); color: var(--chip-fg-on); }
 .wt-enter:disabled { opacity: 0.45; cursor: default; }
 .wt-back { border: var(--border-width) solid var(--chip-border); border-radius: var(--radius-control); color: var(--chip-fg); }

@@ -60,6 +60,17 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
     invoke<number[]>("used_categories").then(setUsed);
   }, [categories]);
 
+  useEffect(() => {
+    if (!picking && !pickingDraft) return;
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest(".wt-color-cell")) return; // the dot and the choices handle their own clicks
+      setPicking(0);
+      setPickingDraft(false);
+    };
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [picking, pickingDraft]);
+
   const fail = (e: unknown) => setMessage(String(e));
   const done = () => (setMessage(""), refresh());
   const month = new Date().toLocaleString("en", { month: "long", timeZone: settings.tz });
@@ -112,7 +123,7 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
                 <td><input className="wt-input" aria-label="New Category name" placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></td>
                 <td />
                 <td className="wt-num">
-                  <button type="button" className="wt-icon-btn wt-enter" aria-label="Save Category (Enter)" title="Save (Enter)" disabled={taken || !(draft.code.trim() || draft.name.trim())} onClick={add}><EnterIcon /></button>
+                  <button type="button" className="wt-chip wt-enter" aria-label="Save Category (Enter)" title="Save (Enter)" disabled={taken || !(draft.code.trim() || draft.name.trim())} onClick={add}><EnterIcon /> Save</button>
                 </td>
               </tr>
             )}
