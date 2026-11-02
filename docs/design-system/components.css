@@ -196,12 +196,21 @@
 
 /* ---------- Screens ---------- */
 .wt-startup {
-  padding: var(--startup-padding);
+  display: flex; flex-direction: column; gap: var(--space-md);
+  margin: var(--space-xl) auto;
+  box-sizing: border-box;
+  padding: var(--space-lg);
   max-width: var(--startup-max-width);
-  color: var(--popup-fg);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-container);
+  color: var(--color-text);
   font: var(--text-body) var(--font-body);
 }
-.wt-startup pre { white-space: pre-wrap; }
+.wt-startup p { margin: 0; }
+.wt-startup-head { display: flex; align-items: center; gap: var(--space-md); }
+.wt-startup-head h1 { margin: 0; font: var(--text-title) var(--font-display); }
+.wt-startup pre { margin: 0; padding: var(--space-sm) var(--space-md); white-space: pre-wrap; background: var(--color-surface-sunken); border-radius: var(--radius-field); font: var(--text-caption) var(--font-mono); }
 .wt-startup-actions { display: flex; flex-wrap: wrap; gap: var(--startup-gap); }
 
 .wt-form { display: grid; gap: var(--space-sm); }

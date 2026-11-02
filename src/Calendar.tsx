@@ -40,7 +40,7 @@ const secs = (d: Date) => d.getTime() / 1000;
 type AbsenceForm = { kind: AbsenceKind; label: string; allDay: boolean; from: string; to: string };
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
-export function Calendar({ settings, onSettings }: { settings: Settings; onSettings: () => void }) {
+export function Calendar({ settings, onSettings, onDebugStartup }: { settings: Settings; onSettings: () => void; onDebugStartup: () => void }) {
   const calendar = useRef<CalendarRef>(null);
   const [range, setRange] = useState<[number, number] | null>(null);
   const [isWeek, setIsWeek] = useState(true);
@@ -386,6 +386,7 @@ export function Calendar({ settings, onSettings }: { settings: Settings; onSetti
           </span>
           <button className="wt-icon-btn" aria-label="Settings" title={`Settings (${/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)`} onClick={onSettings}><Gear /></button>
           {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
+          {import.meta.env.DEV && <button className="wt-chip" onClick={onDebugStartup}>Debug: startup screen</button>}
         </div>
       </header>
       {pickedMeeting && (
