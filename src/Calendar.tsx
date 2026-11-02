@@ -408,10 +408,10 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           <span className="wt-menu-anchor">
             <button className="wt-icon-btn" aria-label="More" aria-haspopup="menu" aria-expanded={more} onClick={() => setMore(!more)}><Dots /></button>
             {more && (
-              <div className="wt-popmenu wt-plus-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setMore(false)}>
-                <button className="wt-chip" role="menuitem" autoFocus onClick={() => (setMore(false), setExporting(true))}>Export …</button>
-                <button className="wt-chip" role="menuitem" onClick={() => (setMore(false), onSettings())}>Settings ({/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)</button>
-                <button className="wt-chip" role="menuitem" onClick={() => invoke("quit")}>Quit Work Tracker</button>
+              <div className="wt-popmenu wt-plus-menu wt-menulist" role="menu" onKeyDown={(e) => e.key === "Escape" && setMore(false)}>
+                <button className="wt-menuitem" role="menuitem" autoFocus onClick={() => (setMore(false), setExporting(true))}>Export …</button>
+                <button className="wt-menuitem" role="menuitem" onClick={() => (setMore(false), onSettings())}>Settings ({/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)</button>
+                <button className="wt-menuitem is-danger" role="menuitem" onClick={() => invoke("quit")}>Quit Work Tracker</button>
               </div>
             )}
           </span>

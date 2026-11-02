@@ -515,6 +515,12 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-plus { width: var(--input-height); height: var(--input-height); border-radius: 50%; border: 0; background: var(--chip-bg-on); color: var(--chip-fg-on); font: inherit; font-size: var(--text-title); line-height: 1; cursor: pointer; }
 .wt-plus-menu { left: auto; right: 0; translate: 0 var(--space-xs); min-width: 180px; }
 .wt-plus-menu .wt-chip { text-align: left; }
+/* A plain list menu: rows, not chips. */
+.wt-menulist { gap: 0; padding: var(--space-xs); background: var(--listbox-bg); border-color: var(--listbox-border); border-radius: var(--listbox-radius); box-shadow: var(--listbox-shadow); }
+.wt-menuitem { all: unset; box-sizing: border-box; display: block; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); font: inherit; color: var(--color-text); white-space: nowrap; cursor: pointer; }
+.wt-menuitem:hover, .wt-menuitem:focus-visible { background: var(--listbox-option-active-bg); }
+.wt-menuitem:focus-visible { outline: var(--focus-ring); outline-offset: calc(-1 * var(--border-width)); }
+.wt-menuitem.is-danger { margin-top: var(--space-xs); padding-top: var(--space-sm); border-top: var(--border-width) solid var(--color-border); border-radius: 0 0 var(--radius-control) var(--radius-control); color: var(--chip-danger-fg); }
 
 /* A modal question: the form sits in the middle over a dimmed page. */
 .wt-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgb(0 0 0 / 0.4); }
