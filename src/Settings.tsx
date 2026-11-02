@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addMinutes } from "./categoryRows";
 import { ChipGroup, DayPicker, TimeField } from "./fields";
 import { Hoot } from "./Hoot";
@@ -170,11 +170,32 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
 }
 
 /** The settings screen. `onBack` leaves with no warning, so unsaved Work time edits are dropped. A save calls `onSaved`. */
+const SECTIONS = [["work", "Work time"], ["cats", "Categories"], ["meetings", "Recurring Meetings"], ["look", "Appearance and startup"], ["back", "Backups"]] as const;
+
 export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSaved: () => void; onBack: () => void }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
   const [look, setLook] = useState<Appearance>({ theme: "light", showMascot: true });
+  const [active, setActive] = useState<string>(SECTIONS[0][0]); // the menu item of the section in view
+  const picked = useRef(false); // a click on the menu holds its item until the user scrolls by hand
+  useEffect(() => {
+    // The page scrolls in a wide window and the content column in a narrow one, so listen to both.
+    const main = document.querySelector(".wt-settings-main");
+    const update = () => {
+      if (picked.current) return;
+      const bottom = (el: Element | null) => !!el && el.scrollHeight > el.clientHeight && el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+      const atEnd = bottom(main) || bottom(document.documentElement);
+      const inView = SECTIONS.filter(([id]) => (document.getElementById(id)?.getBoundingClientRect().top ?? Infinity) <= 140);
+      setActive(atEnd ? SECTIONS[SECTIONS.length - 1][0] : (inView[inView.length - 1] ?? SECTIONS[0])[0]);
+    };
+    const release = () => (picked.current = false);
+    main?.addEventListener("scroll", update);
+    window.addEventListener("scroll", update);
+    window.addEventListener("wheel", release);
+    window.addEventListener("touchmove", release);
+    return () => (main?.removeEventListener("scroll", update), window.removeEventListener("scroll", update), window.removeEventListener("wheel", release), window.removeEventListener("touchmove", release));
+  }, []);
 
   const refresh = () => invoke<Category[]>("list_categories").then(setCategories);
   useEffect(() => void refresh(), []);
@@ -200,11 +221,9 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
       </header>
       <div className="wt-settings-body">
         <nav aria-label="Settings sections" className="wt-settings-nav">
-          <a href="#work" aria-current="true">Work time</a>
-          <a href="#cats">Categories</a>
-          <a href="#meetings">Recurring Meetings</a>
-          <a href="#look">Appearance and startup</a>
-          <a href="#back">Backups</a>
+          {SECTIONS.map(([id, label]) => (
+            <a key={id} href={`#${id}`} aria-current={active === id ? "true" : undefined} onClick={() => (picked.current = true, setActive(id))}>{label}</a>
+          ))}
         </nav>
         <main className="wt-settings-main">
           <WorkTime key={JSON.stringify(saved)} saved={saved} onSaved={onSaved} />
