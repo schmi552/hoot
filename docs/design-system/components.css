@@ -425,7 +425,6 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-overlaps { color: var(--color-danger) !important; font-weight: 600; }
 .wt-calendar .wt-drag-source { visibility: visible; opacity: 0.4; }
 .wt-empty { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-sm); pointer-events: none; text-align: center; }
-.wt-empty-panel { display: flex; flex-direction: column; align-items: center; gap: var(--space-sm); padding: var(--space-xl); border-radius: var(--radius-container); backdrop-filter: blur(var(--empty-blur)); background: var(--empty-veil); }
 .wt-empty p { max-width: var(--empty-text-width); margin: 0; color: var(--color-text-muted); }
 .wt-empty-title { font: var(--text-title) var(--font-display); }
 
