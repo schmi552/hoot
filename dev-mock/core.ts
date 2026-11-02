@@ -18,15 +18,15 @@ const categories = [
 let nextId = 100;
 const entries: any[] = [];
 for (const [d, rows] of Object.entries({
-  "2026-10-26": [["07:00", "09:30", 1, "Importer"], ["09:30", "12:00", 4, "PR reviews"], ["12:30", "16:00", 1, "Importer"]],
-  "2026-10-27": [["07:00", "10:00", 1, "Calendar grid"], ["10:00", "12:00", 3, "Expenses"], ["12:30", "16:00", 1, "Calendar grid"]],
-  "2026-10-28": [["07:00", "11:00", 1, "Popup"], ["11:00", "12:00", 4, "Review"], ["12:30", "15:00", 1, "Popup"]],
-  "2026-10-29": [["07:00", "09:00", 1, "Settings page"], ["09:00", "10:30", 3, "Planning"]],
+  "2026-10-26": [["07:00", "09:30", 1, "Importer"], ["09:45", "12:00", 4, "PR reviews"], ["12:30", "16:00", 1, "Importer"]],
+  "2026-10-27": [["07:00", "09:30", 1, "Calendar grid"], ["09:45", "12:00", 3, "Expenses"], ["12:30", "16:00", 1, "Calendar grid"]],
+  "2026-10-28": [["07:00", "09:30", 1, "Popup"], ["09:45", "11:30", 4, "Review"], ["12:30", "15:00", 1, "Popup"]],
+  "2026-10-29": [["07:00", "09:30", 1, "Settings page"]],
 }) as any)
   for (const [a, b, c, desc] of rows) entries.push({ id: nextId++, categoryId: c, description: desc, startUtc: day(d, a), endUtc: day(d, b), tz });
 const meetings: any[] = [{ id: 1, categoryId: 2, title: "Standup", startLocal: "2026-10-26T09:30", durationMinutes: 15, tz, rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", sourceFile: null }];
 const absences: any[] = [{ id: 1, kind: "vacation", label: "", startDate: "2026-10-30", endDate: "2026-10-30", startUtc: null, endUtc: null, tz: null }];
-const locations: any[] = [{ date: "2026-10-26", location: "office" }, { date: "2026-10-27", location: "home" }, { date: "2026-10-28", location: "office" }];
+const locations: any[] = [{ date: "2026-10-26", location: "office" }, { date: "2026-10-27", location: "home" }, { date: "2026-10-28", location: "office" }, { date: "2026-10-29", location: "office" }];
 
 const handlers: Record<string, (a: any) => any> = {
   startup_failure: () => (q.get("fail") ? JSON.parse(q.get("fail")!) : null),
@@ -76,8 +76,8 @@ export const invoke = async (cmd: string, args: any = {}) => {
   return h(args);
 };
 
-// The clock stands on the fixed board date: Thursday 29 October 2026, 10:40 in Zurich. It keeps running.
-const offset = day("2026-10-29", "10:40") * 1000 - Date.now();
+// The clock stands on the fixed board date: Thursday 29 October 2026, 10:40 in Zurich (or ?now=HH:MM). It keeps running.
+const offset = day("2026-10-29", q.get("now") ?? "10:40") * 1000 - Date.now(); // ?now=HH:MM moves the clock
 const RealDate = Date;
 globalThis.Date = class extends RealDate {
   constructor(...a: any[]) { super(...(a.length ? (a as [any]) : [RealDate.now() + offset])); }
