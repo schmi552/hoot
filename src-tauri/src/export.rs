@@ -2,10 +2,10 @@
 
 use rust_xlsxwriter::{Format, Workbook};
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 
-/// One Entry as the user reads it. `date`, `start` and `end` are text in the zone of the Entry.
+/// One Entry as the user reads it. `date` is "YYYY-MM-DD"; `start` and `end` are text in the zone of the Entry.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Row {
@@ -13,6 +13,9 @@ pub struct Row {
     pub start: String,
     pub end: String,
     pub minutes: u32,
+    /// The PSP code of the Category. Empty for an Absence or a Meeting without Category.
+    #[serde(default)]
+    pub code: String,
     pub category: String,
     pub description: String,
     /// An Absence row. It is listed in sheet 1 but does not count as logged hours.
@@ -38,49 +41,60 @@ fn hours(minutes: u32) -> f64 {
     minutes as f64 / 60.0
 }
 
+/// "2026-10-01" as "01.10.2026". Other text stays as it is.
+fn dmy(iso: &str) -> String {
+    match iso.split('-').collect::<Vec<_>>()[..] {
+        [y, m, d] => format!("{d}.{m}.{y}"),
+        _ => iso.to_string(),
+    }
+}
+
 fn build(export: &Export) -> Result<Workbook, String> {
     let location_of: BTreeMap<_, _> = export.days.iter().map(|d| (d.date.as_str(), d.location.as_str())).collect();
     let mut book = Workbook::new();
     let h2 = Format::new().set_num_format("0.00");
 
     let sheet = book.add_worksheet().set_name("Entries").map_err(|e| e.to_string())?;
-    for (c, h) in ["Date", "Start", "End", "Hours", "Category", "Description", "Location"].iter().enumerate() {
+    for (c, h) in ["Date", "Start", "End", "Hours", "Code", "Category", "Description", "Location"].iter().enumerate() {
         sheet.write_string(0, c as u16, *h).map_err(|e| e.to_string())?;
     }
     for (i, r) in export.rows.iter().enumerate() {
         let i = i as u32 + 1;
-        sheet.write_string(i, 0, &r.date).map_err(|e| e.to_string())?;
+        sheet.write_string(i, 0, dmy(&r.date)).map_err(|e| e.to_string())?;
         sheet.write_string(i, 1, &r.start).map_err(|e| e.to_string())?;
         sheet.write_string(i, 2, &r.end).map_err(|e| e.to_string())?;
         if !r.absence {
             sheet.write_number_with_format(i, 3, hours(r.minutes), &h2).map_err(|e| e.to_string())?;
         }
-        sheet.write_string(i, 4, &r.category).map_err(|e| e.to_string())?;
-        sheet.write_string(i, 5, &r.description).map_err(|e| e.to_string())?;
-        sheet.write_string(i, 6, location_of.get(r.date.as_str()).copied().unwrap_or("")).map_err(|e| e.to_string())?;
+        sheet.write_string(i, 4, &r.code).map_err(|e| e.to_string())?;
+        sheet.write_string(i, 5, &r.category).map_err(|e| e.to_string())?;
+        sheet.write_string(i, 6, &r.description).map_err(|e| e.to_string())?;
+        sheet.write_string(i, 7, location_of.get(r.date.as_str()).copied().unwrap_or("")).map_err(|e| e.to_string())?;
     }
 
-    let worked = || export.rows.iter().filter(|r| !r.absence);
-    let categories: Vec<&str> = worked().map(|r| r.category.as_str()).collect::<BTreeSet<_>>().into_iter().collect();
-    let mut per_day: BTreeMap<&str, BTreeMap<&str, u32>> = BTreeMap::new();
-    for r in worked() {
-        *per_day.entry(&r.date).or_default().entry(&r.category).or_default() += r.minutes;
+    // Sheet 2: one row per Category and day, then the day total as its own row. Absences do not count.
+    let mut per_day: BTreeMap<&str, BTreeMap<(&str, &str), u32>> = BTreeMap::new();
+    for r in export.rows.iter().filter(|r| !r.absence) {
+        *per_day.entry(&r.date).or_default().entry((&r.code, &r.category)).or_default() += r.minutes;
     }
     for d in &export.days {
         per_day.entry(&d.date).or_default();
     }
     let sheet = book.add_worksheet().set_name("Hours per day").map_err(|e| e.to_string())?;
-    sheet.write_string(0, 0, "Date").map_err(|e| e.to_string())?;
-    sheet.write_string(0, 1, "Location").map_err(|e| e.to_string())?;
-    for (c, name) in categories.iter().enumerate() {
-        sheet.write_string(0, c as u16 + 2, *name).map_err(|e| e.to_string())?;
+    for (c, h) in ["Date", "Location", "Code", "Category", "Hours"].iter().enumerate() {
+        sheet.write_string(0, c as u16, *h).map_err(|e| e.to_string())?;
     }
-    for (i, (date, sums)) in per_day.iter().enumerate() {
-        let i = i as u32 + 1;
-        sheet.write_string(i, 0, *date).map_err(|e| e.to_string())?;
-        sheet.write_string(i, 1, location_of.get(date).copied().unwrap_or("")).map_err(|e| e.to_string())?;
-        for (c, name) in categories.iter().enumerate() {
-            sheet.write_number_with_format(i, c as u16 + 2, hours(sums.get(name).copied().unwrap_or(0)), &h2).map_err(|e| e.to_string())?;
+    let mut i = 0;
+    for (date, sums) in &per_day {
+        let location = location_of.get(date).copied().unwrap_or("");
+        let lines = sums.iter().map(|(&(code, name), &m)| (code, name, m)).chain([("", "Total", sums.values().sum())]);
+        for (code, name, minutes) in lines {
+            i += 1;
+            sheet.write_string(i, 0, dmy(date)).map_err(|e| e.to_string())?;
+            sheet.write_string(i, 1, location).map_err(|e| e.to_string())?;
+            sheet.write_string(i, 2, code).map_err(|e| e.to_string())?;
+            sheet.write_string(i, 3, name).map_err(|e| e.to_string())?;
+            sheet.write_number_with_format(i, 4, hours(minutes), &h2).map_err(|e| e.to_string())?;
         }
     }
     Ok(book)
@@ -110,7 +124,7 @@ mod tests {
     use calamine::{open_workbook, Data, Reader, Xlsx};
 
     fn row(date: &str, minutes: u32, category: &str, description: &str) -> Row {
-        Row { date: date.into(), start: "09:00".into(), end: "10:00".into(), minutes, category: category.into(), description: description.into(), absence: false }
+        Row { date: date.into(), start: "09:00".into(), end: "10:00".into(), minutes, code: format!("P-{category}"), category: category.into(), description: description.into(), absence: false }
     }
     fn sample() -> Export {
         Export {
@@ -133,14 +147,22 @@ mod tests {
         write(&path, &sample()).unwrap();
         let mut book: Xlsx<_> = open_workbook(&path).unwrap();
         let entries = text(&book.worksheet_range("Entries").unwrap());
-        assert_eq!(entries[0], ["Date", "Start", "End", "Hours", "Category", "Description", "Location"]);
-        assert_eq!(entries[2], ["2026-10-26", "09:00", "10:00", "1.5", "B", "two", "Home"]);
+        assert_eq!(entries[0], ["Date", "Start", "End", "Hours", "Code", "Category", "Description", "Location"]);
+        assert_eq!(entries[2], ["26.10.2026", "09:00", "10:00", "1.5", "P-B", "B", "two", "Home"]);
         assert_eq!(entries.len(), 4);
         let days = text(&book.worksheet_range("Hours per day").unwrap());
-        assert_eq!(days[0], ["Date", "Location", "A", "B"]);
-        assert_eq!(days[1], ["2026-10-26", "Home", "1", "1.5"]);
-        assert_eq!(days[2], ["2026-10-27", "Office", "0.5", "0"]);
-        assert_eq!(days[3], ["2026-10-28", "Home", "0", "0"]);
+        assert_eq!(
+            days,
+            [
+                ["Date", "Location", "Code", "Category", "Hours"],
+                ["26.10.2026", "Home", "P-A", "A", "1"],
+                ["26.10.2026", "Home", "P-B", "B", "1.5"],
+                ["26.10.2026", "Home", "", "Total", "2.5"],
+                ["27.10.2026", "Office", "P-A", "A", "0.5"],
+                ["27.10.2026", "Office", "", "Total", "0.5"],
+                ["28.10.2026", "Home", "", "Total", "0"],
+            ]
+        );
         assert!(!dir.path().join("report.xlsx.tmp").exists());
     }
 
@@ -156,12 +178,11 @@ mod tests {
         let mut book: Xlsx<_> = open_workbook(&path).unwrap();
         let entries = text(&book.worksheet_range("Entries").unwrap());
         assert_eq!(entries.len(), 7);
-        assert_eq!(entries[4], ["2026-10-28", "09:00", "10:00", "", "Absence (not worked)", "Vacation", "Home"]);
-        assert_eq!(entries[5], ["2026-10-29", "", "", "", "Absence (not worked)", "Leave", ""]);
+        assert_eq!(entries[4], ["28.10.2026", "09:00", "10:00", "", "P-Absence (not worked)", "Absence (not worked)", "Vacation", "Home"]);
+        assert_eq!(entries[5], ["29.10.2026", "", "", "", "P-Absence (not worked)", "Absence (not worked)", "Leave", ""]);
         let days = text(&book.worksheet_range("Hours per day").unwrap());
-        assert_eq!(days[0], ["Date", "Location", "A", "B"]);
-        assert_eq!(days.len(), 4, "an Absence adds no day and no Category column");
-        assert_eq!(days[3], ["2026-10-28", "Home", "1", "0"]);
+        assert_eq!(days.len(), 8, "an Absence adds no day and no Category row");
+        assert_eq!(days[7], ["28.10.2026", "Home", "", "Total", "1"]);
     }
 
     #[test]

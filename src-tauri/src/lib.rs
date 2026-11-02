@@ -228,6 +228,25 @@ fn show_backups_folder(app: AppHandle) -> Result<(), String> {
     std::process::Command::new(opener).arg(dir).spawn().map(drop).map_err(|e| e.to_string())
 }
 
+/// Show `path` in the file manager: selected in Finder or Explorer, or its folder on other systems.
+#[tauri::command]
+fn show_in_folder(path: String) -> Result<(), String> {
+    let mut cmd = if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.args(["-R", &path]);
+        c
+    } else if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("explorer");
+        c.arg(format!("/select,{path}"));
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new(".")));
+        c
+    };
+    cmd.spawn().map(drop).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn quit(app: AppHandle) {
     app.exit(0);
@@ -364,6 +383,7 @@ pub fn run() {
             set_workday_location,
             list_workday_locations,
             export_xlsx,
+            show_in_folder,
             startup_failure,
             start_empty,
             restore_latest_backup,
