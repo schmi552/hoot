@@ -149,7 +149,7 @@ export function Onboarding({ onDone, demo }: { onDone: () => void; demo?: boolea
               <ChipGroup label="Interval" options={INTERVALS} value={interval} onChange={setIntervalMinutes} suffix=" min" />
               <label className="wt-check">
                 <input type="checkbox" checked={autostart} onChange={(e) => setAutostart(e.target.checked)} />
-                Open Work Tracker when I log in
+                Open Hoot when I log in
               </label>
             </Step>
 

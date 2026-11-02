@@ -78,11 +78,11 @@ export function exportPresets(today: string) {
   };
 }
 
-/** `work-tracker_YYYY-MM.xlsx` for a full month, else `work-tracker_{from}_{to}.xlsx`. */
+/** `hoot_YYYY-MM.xlsx` for a full month, else `hoot_{from}_{to}.xlsx`. */
 export function exportFileName(from: string, to: string) {
   const [y, m] = from.split("-").map(Number);
   const month = monthRange(y, m);
-  return from === month.from && to === month.to ? `work-tracker_${from.slice(0, 7)}.xlsx` : `work-tracker_${from}_${to}.xlsx`;
+  return from === month.from && to === month.to ? `hoot_${from.slice(0, 7)}.xlsx` : `hoot_${from}_${to}.xlsx`;
 }
 
 /** "2026-10-01" to "01.10.2026". */

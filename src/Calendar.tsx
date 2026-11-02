@@ -444,7 +444,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
       <header className="wt-toolbar">
         <div className="wt-toolbar-group">
           <Hoot px={3} show={showMascot} />
-          <span className="wt-toolbar-name">Work Tracker</span>
+          <span className="wt-toolbar-name">Hoot</span>
           <button className="wt-icon-btn" aria-label={isWeek ? "Previous week" : "Previous month"} onClick={() => calendar.current?.getApi().prev()}><Chevron dir="left" /></button>
           <button className="wt-chip" onClick={() => calendar.current?.getApi().today()}>Today (T)</button>
           <button className="wt-icon-btn" aria-label={isWeek ? "Next week" : "Next month"} onClick={() => calendar.current?.getApi().next()}><Chevron dir="right" /></button>
@@ -479,7 +479,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
               <div className="wt-popmenu wt-plus-menu wt-menulist" role="menu" onKeyDown={(e) => e.key === "Escape" && setMore(false)}>
                 <button className="wt-menuitem" role="menuitem" autoFocus onClick={() => (setMore(false), setExporting(true))}>Export …</button>
                 <button className="wt-menuitem" role="menuitem" onClick={() => (setMore(false), onSettings())}>Settings ({/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)</button>
-                <button className="wt-menuitem is-danger" role="menuitem" onClick={() => invoke("quit")}>Quit Work Tracker</button>
+                <button className="wt-menuitem is-danger" role="menuitem" onClick={() => invoke("quit")}>Quit Hoot</button>
               </div>
             )}
           </span>

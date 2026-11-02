@@ -267,7 +267,7 @@ fn report_save_failure(app: AppHandle) {
     if hidden {
         let _ = tauri_plugin_notification::NotificationExt::notification(&app)
             .builder()
-            .title("Work Tracker")
+            .title("Hoot")
             .body("Could not save. Open the app.")
             .show();
     }

@@ -1588,6 +1588,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hoot"
+version = "0.1.0"
+dependencies = [
+ "calamine",
+ "rusqlite",
+ "rusqlite_migration",
+ "rust_xlsxwriter",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-notification",
+ "tempfile",
+]
+
+[[package]]
 name = "html5ever"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4969,23 +4986,6 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
-
-[[package]]
-name = "work-tracker"
-version = "0.1.0"
-dependencies = [
- "calamine",
- "rusqlite",
- "rusqlite_migration",
- "rust_xlsxwriter",
- "serde",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-notification",
- "tempfile",
-]
 
 [[package]]
 name = "writeable"

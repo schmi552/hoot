@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Work Tracker",
+  "productName": "Hoot",
   "version": "0.1.0",
   "identifier": "app.worktracker",
   "build": {
@@ -11,8 +11,8 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Work Tracker", "width": 1100, "height": 760 },
-      { "label": "popup", "title": "Work Tracker check-in", "url": "index.html#popup", "width": 400, "height": 520, "visible": false, "alwaysOnTop": true, "resizable": false, "skipTaskbar": true }
+      { "label": "main", "title": "Hoot", "width": 1100, "height": 760 },
+      { "label": "popup", "title": "Hoot check-in", "url": "index.html#popup", "width": 400, "height": 520, "visible": false, "alwaysOnTop": true, "resizable": false, "skipTaskbar": true }
     ],
     "security": { "csp": null }
   },

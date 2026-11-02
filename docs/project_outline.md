@@ -1,4 +1,4 @@
-# Work Tracker
+# Hoot
 Issue is that i want to keep better track of what i do at work. However excel is tedious and i dont want to write to a md etc.
 
 ## Proposal

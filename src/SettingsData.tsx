@@ -213,7 +213,7 @@ export function Backups({ tz }: { tz: string }) {
       {confirming && backup && (
         <form className="wt-notice is-warning wt-confirm" role="alertdialog" aria-label="Restore" onKeyDown={(e) => e.key === "Escape" && setConfirming(false)} onSubmit={(e) => e.preventDefault()}>
           <span>
-            Restore <b className="wt-mono">{backup.name}</b> from {when}? Work Tracker replaces your data with this copy and restarts. Changes after that time are lost.
+            Restore <b className="wt-mono">{backup.name}</b> from {when}? Hoot replaces your data with this copy and restarts. Changes after that time are lost.
           </span>
           <div className="wt-actions">
             <button type="button" className="wt-chip" autoFocus onClick={() => setConfirming(false)}>Cancel</button>

@@ -1,4 +1,4 @@
-# Work Tracker
+# Hoot
 
 A local desktop app that helps one person record what they do at work and shows it in a calendar.
 

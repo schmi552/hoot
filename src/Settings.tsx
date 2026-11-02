@@ -222,7 +222,7 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
             </div>
             <label className="wt-check">
               <input type="checkbox" checked={autostart} onChange={(e) => toggleAutostart(e.target.checked)} />
-              Open Work Tracker when I log in
+              Open Hoot when I log in
             </label>
             <label className="wt-check">
               <input type="checkbox" checked={look.showMascot} onChange={(e) => setShowMascot(e.target.checked)} />

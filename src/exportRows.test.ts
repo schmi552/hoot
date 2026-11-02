@@ -45,10 +45,10 @@ test("the Code column is empty for a Meeting without Category", () => {
 });
 
 test("the file name is by month for a full month and by range otherwise", () => {
-  expect(exportFileName("2026-10-01", "2026-10-31")).toBe("work-tracker_2026-10.xlsx");
-  expect(exportFileName("2028-02-01", "2028-02-29")).toBe("work-tracker_2028-02.xlsx");
-  expect(exportFileName("2026-10-01", "2026-10-30")).toBe("work-tracker_2026-10-01_2026-10-30.xlsx");
-  expect(exportFileName("2026-10-26", "2026-11-01")).toBe("work-tracker_2026-10-26_2026-11-01.xlsx");
+  expect(exportFileName("2026-10-01", "2026-10-31")).toBe("hoot_2026-10.xlsx");
+  expect(exportFileName("2028-02-01", "2028-02-29")).toBe("hoot_2028-02.xlsx");
+  expect(exportFileName("2026-10-01", "2026-10-30")).toBe("hoot_2026-10-01_2026-10-30.xlsx");
+  expect(exportFileName("2026-10-26", "2026-11-01")).toBe("hoot_2026-10-26_2026-11-01.xlsx");
 });
 
 test("the presets start the week on Monday", () => {

@@ -144,12 +144,12 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => voi
   };
 
   return (
-    <div className="wt-popup wt-popup--window" role="dialog" aria-label="Work Tracker check-in" tabIndex={0} onKeyDown={onKeyDown} >
+    <div className="wt-popup wt-popup--window" role="dialog" aria-label="Hoot check-in" tabIndex={0} onKeyDown={onKeyDown} >
       <div className="wt-head">
-        <b>Work Tracker</b>
+        <b>Hoot</b>
         <span className="wt-sub">{time(now)} · Esc {saved ? "close" : "skip"}</span>
       </div>
-      <div className="wt-thread" ref={thread} role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
+      <div className="wt-thread" ref={thread} role="log" aria-live="polite" aria-label="Conversation with Hoot">
         {asked.current && <Say text="Good morning! Do you work from home or in the office today?" />}
         {asked.current && place && <div className="wt-me">{place}</div>}
         {!askLocation && <Say text={question} mood={failed ? "problem" : "asking"} />}
@@ -266,12 +266,12 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
   };
 
   return (
-    <div className="wt-popup wt-popup--window" role="dialog" aria-label="Work Tracker gap" tabIndex={0} autoFocus onKeyDown={onKeyDown}>
+    <div className="wt-popup wt-popup--window" role="dialog" aria-label="Hoot gap" tabIndex={0} autoFocus onKeyDown={onKeyDown}>
       <div className="wt-head">
-        <b>Work Tracker</b>
+        <b>Hoot</b>
         <span className="wt-sub">{time(now)} · Esc skip</span>
       </div>
-      <div className="wt-thread" role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
+      <div className="wt-thread" role="log" aria-live="polite" aria-label="Conversation with Hoot">
         <Say text={`I missed you from ${time(start)} to ${time(end)}. What happened in that time?`} mood={failed ? "problem" : "away"} />
         {choice && <div className="wt-me">{{ accept: "Accept it", split: "Split it", leave: "Leave it empty" }[choice]}</div>}
         {choice === "split" && <Say text="At what time did you start something new? Before that, it was the last Entry." />}

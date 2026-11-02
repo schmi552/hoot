@@ -1,10 +1,10 @@
 [package]
-name = "work-tracker"
+name = "hoot"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "work_tracker_lib"
+name = "hoot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
