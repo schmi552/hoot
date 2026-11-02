@@ -46,14 +46,14 @@ const scrollerOf = (e: Element | null | undefined) => {
   return e as HTMLElement | null;
 };
 
+const WINDOW = 42 * 86_400; // seconds of data to load on each side of the shown range
+
 export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboarding }: { settings: Settings; onSettings: () => void; onDebugStartup: () => void; onDebugOnboarding: () => void }) {
   const calendar = useRef<CalendarRef>(null);
   const [range, setRange] = useState<[number, number] | null>(null);
   const [isWeek, setIsWeek] = useState(true);
   const [monthStart, setMonthStart] = useState(0); // the first day of the shown month, for the title
-  const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [locations, setLocations] = useState<Record<string, string>>({}); // date -> "home" | "office"
   const [slot, setSlot] = useState<Slot | null>(null);
   const [picked, setPicked] = useState<Date | null>(null); // a clicked slot, shaded until `N` or a drag uses it
   const [categoryId, setCategoryId] = useState(0);
@@ -89,23 +89,27 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   const [rows, setRows] = useState<SettingsRow<Settings>[]>([]); // the settings history: each day uses the row that was valid on it
   const [reload, setReload] = useState(0);
   const load = () => setReload((n) => n + 1);
+  // Entries and locations of a window around the shown range. A switch to a near week or month finds its data here and shows at once.
+  const [loaded, setLoaded] = useState<{ from: number; to: number; reload: number; entries: Entry[]; locations: Record<string, string> } | null>(null); // locations: date -> "home" | "office"
   useEffect(() => {
     if (!range) return;
-    let stale = false; // a slower answer for an earlier week must not replace the current one
-    invoke<Entry[]>("list_entries", { fromUtc: range[0], toUtc: range[1] }).then((e) => stale || setEntries(e));
+    if (loaded && loaded.reload === reload && range[0] >= loaded.from && range[1] <= loaded.to) return;
+    let stale = false; // a slower answer for an earlier range must not replace the current one
+    const [from, to] = [range[0] - WINDOW, range[1] + WINDOW];
+    const [fromDay, toDay] = [dateKey(ymdIn(settings.tz, from)), dateKey(ymdIn(settings.tz, to - 1))];
+    Promise.all([
+      invoke<Entry[]>("list_entries", { fromUtc: from, toUtc: to }),
+      invoke<{ date: string; location: string }[]>("list_workday_locations", { from: fromDay, to: toDay }),
+    ]).then(([entries, l]) => stale || setLoaded({ from, to, reload, entries, locations: Object.fromEntries(l.map((x) => [x.date, x.location])) }));
     return () => void (stale = true);
-  }, [range, reload]);
+  }, [range, reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inWindow = !!range && !!loaded && range[0] >= loaded.from && range[1] <= loaded.to;
+  const entries = useMemo(() => (range && loaded ? loaded.entries.filter((e) => e.endUtc > range[0] && e.startUtc < range[1]) : []), [loaded, range]);
+  const locations = loaded?.locations ?? {};
   useEffect(() => {
     const unlisten = listen("entries-changed", load); // the popup saved an Entry
     return () => void unlisten.then((f) => f());
   }, []);
-  useEffect(() => {
-    if (!range) return;
-    let stale = false;
-    const [from, to] = [dateKey(ymdIn(settings.tz, range[0])), dateKey(ymdIn(settings.tz, range[1] - 1))];
-    invoke<{ date: string; location: string }[]>("list_workday_locations", { from, to }).then((l) => stale || setLocations(Object.fromEntries(l.map((x) => [x.date, x.location]))));
-    return () => void (stale = true);
-  }, [range, reload]);
   useEffect(() => void invoke<SettingsRow<Settings>[]>("list_settings_history").then(setRows), [settings]);
   useEffect(() => void invoke<Category[]>("list_categories").then(setCategories), []);
   useEffect(() => void invoke<{ showMascot: boolean }>("get_appearance").then((a) => setShowMascot(a.showMascot)), []);
@@ -356,11 +360,13 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   }));
   const monthRows = Array.from({ length: monthDays.length / 7 }, (_, r) => rowTotals(monthDays.slice(r * 7, r * 7 + 7).map((d) => monthStats.get(dateKey(d))!)));
   useLayoutEffect(() => {
+    if (isWeek) return; // only Month has a Week column
     const scroller = scrollerOf(monthEl.current?.querySelector(".wt-month-cell"));
     if (scroller) setWeekColTop(scroller.getBoundingClientRect().top - monthEl.current!.getBoundingClientRect().top - 26); // 26 is --month-head-height
   }); // after every render: the toolbar and the grid can move without a change of ours
   const weekColRows = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (isWeek) return;
     // The Week column has no scroll of its own. It follows the month grid.
     const grid = scrollerOf(monthEl.current?.querySelector(".wt-month-cell"));
     if (!grid || !weekColRows.current) return;
@@ -370,7 +376,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   });
   const shown = days.filter((d) => !hidden.includes(weekday(d)));
   const title = isWeek ? (shown.length ? weekTitle(shown[0], shown[shown.length - 1]) : "") : monthStart ? monthTitle(ymdIn(settings.tz, monthStart)) : "";
-  const empty = isWeek && !!range && !entries.length;
+  const empty = isWeek && inWindow && !entries.length; // only once the data of this range is here
   const next = useMemo(() => {
     const now = Date.now() / 1000;
     return empty ? nextCheckIn(settings, now, [], [...expandMeetings(series, exceptions, now, now + 8 * DAY), ...away]) : null;
