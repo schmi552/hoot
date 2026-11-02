@@ -6,7 +6,7 @@ Spec stories: 120 to 122.
 
 **Blocked by:** 08
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Each of the three cases shows its own text.
 - [ ] The restore button shows the real date of the newest backup. It is disabled when there is no backup.
