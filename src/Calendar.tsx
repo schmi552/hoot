@@ -384,6 +384,10 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         <div className="wt-toolbar-group">
           <Hoot px={3} show={showMascot} />
           <span className="wt-toolbar-name">Work Tracker</span>
+          <button className="wt-icon-btn" aria-label={isWeek ? "Previous week" : "Previous month"} onClick={() => calendar.current?.getApi().prev()}><Chevron dir="left" /></button>
+          <button className="wt-chip" onClick={() => calendar.current?.getApi().today()}>Today (T)</button>
+          <button className="wt-icon-btn" aria-label={isWeek ? "Next week" : "Next month"} onClick={() => calendar.current?.getApi().next()}><Chevron dir="right" /></button>
+          <h1 className="wt-toolbar-title">{title}</h1>
         </div>
         <div className="wt-toolbar-group">
           <div role="group" aria-label="View" className="wt-segmented">
@@ -498,12 +502,6 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
         </form>
       )}
-      <div className="wt-calnav">
-        <button className="wt-chip" onClick={() => calendar.current?.getApi().today()}>Today (T)</button>
-        <button className="wt-icon-btn" aria-label={isWeek ? "Previous week" : "Previous month"} onClick={() => calendar.current?.getApi().prev()}><Chevron dir="left" /></button>
-        <h1 className="wt-toolbar-title">{title}</h1>
-        <button className="wt-icon-btn" aria-label={isWeek ? "Next week" : "Next month"} onClick={() => calendar.current?.getApi().next()}><Chevron dir="right" /></button>
-      </div>
       {!isWeek && (
         <div className="wt-legend">
           {categories.map((c) => <span key={c.id} className={catClass(c.id)}><span className="wt-dot" style={{ borderRadius: "50%", width: 10, height: 10, background: "var(--cat-solid)" }} />{c.code || c.name}</span>)}
