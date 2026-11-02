@@ -222,12 +222,13 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     }, fail);
   };
 
-  /** Move or resize; a result that overlaps another Entry is refused. */
+  /** Move or resize; a result that overlaps another Entry is refused. Returns false when it is refused, so the grid can put the Entry back. */
   const place = (e: Entry, startUtc: number, endUtc: number) => {
-    if (startUtc === e.startUtc && endUtc === e.endUtc) return load();
+    if (startUtc === e.startUtc && endUtc === e.endUtc) return load(), true;
     const to = { ...e, startUtc, endUtc };
-    if (overlapsAny(entries, to, e.id)) return fail("This time already has an Entry.");
+    if (overlapsAny(entries, to, e.id)) return fail("This time already has an Entry."), false;
     act(e, to);
+    return true;
   };
 
   const save = () => {
@@ -610,13 +611,12 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         }}
         eventDidMount={(i) => void (i.el.dataset.id = i.event.id)}
         eventDrop={(i) => {
-          i.revert(); // the grid follows the saved Entries, not the drag
-          place(entries.find((x) => x.id === Number(i.event.id))!, secs(i.event.start!), secs(i.event.end!));
+          // The grid keeps the new time while the store saves, so it does not jump back and forth. A refused or failed change loads the stored time again.
+          if (!place(entries.find((x) => x.id === Number(i.event.id))!, secs(i.event.start!), secs(i.event.end!))) i.revert();
         }}
         eventResize={(i) => {
-          i.revert();
           const e = entries.find((x) => x.id === Number(i.event.id))!;
-          place(e, e.startUtc, secs(i.event.end!)); // an overlap is refused, like a move
+          if (!place(e, e.startUtc, secs(i.event.end!))) i.revert(); // an overlap is refused, like a move
         }}
         columnEventClass={(i) => {
           const entry = i.event.extendedProps.entry as Entry | undefined;
@@ -673,6 +673,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
               </div>
             );
           }
+          if (!absence) return null; // the preview of a dragged selection has no item behind it
           return <span className="wt-absence-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
         }}
         dayHeaderContent={(i) => {
