@@ -385,18 +385,15 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             )}
           </span>
           <button className="wt-icon-btn" aria-label="Settings" title={`Settings (${/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)`} onClick={onSettings}><Gear /></button>
-          {import.meta.env.DEV && <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>}
-          {import.meta.env.DEV && <button className="wt-chip" onClick={onDebugStartup}>Debug: startup screen</button>}
-          {import.meta.env.DEV && <button className="wt-chip" onClick={onDebugOnboarding}>Debug: onboarding</button>}
         </div>
       </header>
-      {pickedMeeting && (
-        <>
-          <button className="wt-chip" onClick={() => editMeeting(pickedMeeting)}>Edit Meeting</button>
-          <button className="wt-chip" onClick={() => setMeeting({ remove: pickedMeeting })}>Delete Meeting</button>
-        </>
+      {import.meta.env.DEV && (
+        <div className="wt-debug">
+          <button className="wt-chip" onClick={() => emit("debug-popup")}>Debug: open popup</button>
+          <button className="wt-chip" onClick={onDebugStartup}>Debug: startup screen</button>
+          <button className="wt-chip" onClick={onDebugOnboarding}>Debug: onboarding</button>
+        </div>
       )}
-      {pickedAbsence && <button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button>}
       {exporting && <ExportDialog settings={settings} onClose={() => setExporting(false)} />}
       {importing && <ImportDialog settings={settings} categories={categories} onClose={() => setImporting(false)} onDone={(ids) => (setImporting(false), setUncategorized(ids), load())} />}
       {picking && <PickCategoryDialog categories={categories} series={series.filter((m) => uncategorized.includes(m.id))} onClose={() => setPicking(false)} onDone={() => (setPicking(false), setUncategorized([]), load())} />}
@@ -435,7 +432,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             {slot.start.toLocaleString("en-GB", { timeZone: settings.tz, weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
             {slot.end.toLocaleTimeString("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" })}
           </span>
-          <div style={{ flex: 1 }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
+          <div style={{ flex: "1 1 160px" }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
           <input className="wt-input" aria-label="Description" autoFocus value={description} onChange={(e) => setDescription(e.target.value)} />
           <button className="wt-chip" type="button" onClick={close}>Cancel</button>
           <button className="wt-chip is-primary" type="submit" disabled={!categoryId}>Save</button>
@@ -465,15 +462,21 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             {ABSENCE_KINDS.map((k) => <option key={k}>{k}</option>)}
           </select>
           <input className="wt-input" aria-label="Label" placeholder="Label (optional)" autoFocus value={absenceForm.label} onChange={(e) => setAbsenceForm({ ...absenceForm, label: e.target.value })} />
-          <label className="wt-sub">
+          <label className="wt-inline-field wt-sub">
             <input type="checkbox" checked={absenceForm.allDay} onChange={(e) => setAbsenceForm({ ...absenceForm, allDay: e.target.checked, from: absenceForm.from.slice(0, 10) + (e.target.checked ? "" : "T" + settings.workStart), to: absenceForm.to.slice(0, 10) + (e.target.checked ? "" : "T" + settings.workEnd) })} /> All day
           </label>
-          <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} aria-label="From" value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} />
-          <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} aria-label="To" value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} />
+          <label className="wt-inline-field wt-sub">From <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} /></label>
+          <label className="wt-inline-field wt-sub">To <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} /></label>
           <button className="wt-chip" type="button" onClick={() => setAbsenceForm(null)}>Cancel</button>
           <button className="wt-chip is-primary" type="submit">Save</button>
           <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
         </form>
+      )}
+      {!isWeek && (
+        <div className="wt-legend">
+          {categories.map((c) => <span key={c.id} className={catClass(c.id)}><span className="wt-dot" style={{ borderRadius: "50%", width: 10, height: 10, background: "var(--cat-solid)" }} />{c.code || c.name}</span>)}
+          <span>Bar = share of the day per Category. Click a day to open its week.</span>
+        </div>
       )}
       <div ref={monthEl} className={isWeek ? "wt-week" : "wt-month"}>
       <div className="wt-week-grid">
@@ -483,6 +486,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         timeZone={settings.tz}
         initialView="timeGridWeek"
         hiddenDays={hidden}
+        businessHours={{ daysOfWeek: [...settings.workdays].map(Number), startTime: settings.workStart, endTime: settings.workEnd }}
         slotMinTime={hourText(hours.minHour)}
         slotMaxTime={hourText(hours.maxHour)}
         slotMinHeight={32}
@@ -558,7 +562,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             start: new Date(m.startUtc * 1000),
             end: new Date(m.endUtc * 1000),
             editable: false,
-            className: `wt-meeting ${catClass(m.categoryId)}`,
+            className: `wt-meeting ${catClass(m.categoryId)}${pickedMeeting && pickedMeeting.seriesId === m.seriesId && pickedMeeting.startUtc === m.startUtc ? " wt-selected" : ""}`,
             extendedProps: { meeting: m, repeats: !!series.find((x) => x.id === m.seriesId)?.rrule },
           })),
           ...absences.map((a) => ({
@@ -566,9 +570,17 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             title: absenceTitle(a),
             ...(a.startDate ? { start: a.startDate, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), allDay: true } : { start: new Date(a.startUtc! * 1000), end: new Date(a.endUtc! * 1000) }),
             editable: false,
-            className: "wt-absence",
+            className: `wt-absence${pickedAbsence?.id === a.id ? " wt-selected" : ""}`,
             extendedProps: { absence: a },
           })),
+          // The off-hours shade is the businessHours below. Each day also gets a Lunch band, and a full-day Absence hatches its whole column.
+          ...(isWeek ? days.filter((d) => isWorkday(settingsAt(d).workdays, d)).map((d) => ({
+            start: new Date(instantAt(settings.tz, d, parseHM(settingsAt(d).lunchStart)) * 1000),
+            end: new Date(instantAt(settings.tz, d, parseHM(settingsAt(d).lunchEnd)) * 1000),
+            display: "background",
+            className: "wt-lunchband",
+          })) : []),
+          ...(isWeek ? absences.filter((a) => a.startDate).map((a) => ({ start: a.startDate!, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), display: "background", className: "wt-absence-bg" })) : []),
           ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
         ]}
         eventContent={(i) => {
@@ -602,16 +614,23 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           return <span className="wt-absence-label"><b>{absenceTitle(absence!)}</b>{!i.event.allDay && ` · ${time}`}</span>;
         }}
         dayHeaderContent={(i) => {
-          if (i.view.type !== "timeGridWeek") return <div>{i.text}</div>;
+          if (i.view.type !== "timeGridWeek") return <div className="wt-dow">{i.text}</div>;
           const day = dayOf(i.date);
           const key = dateKey(day);
+          const dow = new Date(`${key}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
           return (
-            <>
-              <div>{i.text}</div>
-              <div className="wt-day-meta">
+            <div className="wt-day-head">
+              <div className="wt-day-top">
+                <span className="wt-day-name">
+                  {dow}
+                  <span className={i.isToday ? "wt-month-num is-today" : "wt-month-num"}>{day.d}</span>
+                </span>
                 {isWorkday(settingsAt(day).workdays, day) && (
                   <span className="wt-menu-anchor">
-                    <button className="wt-badge" aria-haspopup="menu" aria-expanded={locMenu === key} onClick={(e) => (e.stopPropagation(), setLocMenu(locMenu === key ? "" : key))}>{where(i.date) || "Location"}</button>
+                    <button className="wt-badge" aria-haspopup="menu" aria-expanded={locMenu === key} onClick={(e) => (e.stopPropagation(), setLocMenu(locMenu === key ? "" : key))}>
+                      {locations[key] && <LocationIcon location={locations[key]} />}
+                      {where(i.date) || "Location"}
+                    </button>
                     {locMenu === key && (
                       <div className="wt-popmenu" role="menu" onKeyDown={(e) => e.key === "Escape" && setLocMenu("")}>
                         {(["home", "office"] as const).map((l) => (
@@ -621,9 +640,9 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
                     )}
                   </span>
                 )}
-                <span className="wt-sub">{formatHM(logged(i.date))} / {formatHM(expected(i.date))}</span>
               </div>
-            </>
+              <span className="wt-day-total">{logged(i.date) < expected(i.date) && <ShortIcon />}{formatHM(logged(i.date))}<span className="wt-day-exp"> / {formatHM(expected(i.date))}</span></span>
+            </div>
           );
         }}
         dayCellTopContent={(i) => {
@@ -676,6 +695,34 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
               <span className="wt-bar"><span style={{ width: `${(s.minutes / weekTotal) * 100}%` }} /></span>
             </div>
           ))}
+          {selected > 0 && (
+            <div className="wt-side-keys">
+              <b>Selected Entry</b>
+              <span><kbd className="wt-kbd">↑</kbd><kbd className="wt-kbd">↓</kbd>move 15 min</span>
+              <span><kbd className="wt-kbd">Shift</kbd><kbd className="wt-kbd">↑</kbd><kbd className="wt-kbd">↓</kbd>resize</span>
+              <span><kbd className="wt-kbd">Ctrl</kbd><kbd className="wt-kbd">D</kbd>duplicate</span>
+              <span><kbd className="wt-kbd">Ctrl</kbd><kbd className="wt-kbd">C</kbd><kbd className="wt-kbd">V</kbd>copy, paste</span>
+              <span><kbd className="wt-kbd">Del</kbd>delete · <kbd className="wt-kbd">Ctrl</kbd><kbd className="wt-kbd">Z</kbd>undo</span>
+            </div>
+          )}
+          {pickedMeeting && (
+            <div className="wt-side-keys">
+              <b>Selected Meeting</b>
+              <span><kbd className="wt-kbd">Enter</kbd>edit · <kbd className="wt-kbd">Del</kbd>delete</span>
+              <span><kbd className="wt-kbd">Ctrl</kbd><kbd className="wt-kbd">C</kbd>copy as Entry</span>
+              <span className="wt-menu">
+                <button className="wt-chip" onClick={() => editMeeting(pickedMeeting)}>Edit Meeting</button>
+                <button className="wt-chip" onClick={() => setMeeting({ remove: pickedMeeting })}>Delete Meeting</button>
+              </span>
+            </div>
+          )}
+          {pickedAbsence && (
+            <div className="wt-side-keys">
+              <b>Selected Absence</b>
+              <span><kbd className="wt-kbd">Del</kbd>delete</span>
+              <span className="wt-menu"><button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button></span>
+            </div>
+          )}
         </aside>
       )}
       </div>

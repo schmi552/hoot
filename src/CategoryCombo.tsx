@@ -20,7 +20,8 @@ export function CategoryCombo({ options, value, onChange, none }: { options: Cat
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setOpen(true);
-      setActive((a) => Math.min(Math.max(a + (e.key === "ArrowDown" ? 1 : -1), 0), shown.length - 1));
+      if (open) setActive((a) => Math.min(Math.max(a + (e.key === "ArrowDown" ? 1 : -1), 0), shown.length - 1));
+      else setActive(Math.max(shown.findIndex((o) => o.id === value), 0)); // opening shows the current value
     } else if (open && e.key === "Enter" && shown[active]) { e.stopPropagation(); pick(shown[active]); }
     else if (open && e.key === "Escape") { e.stopPropagation(); setOpen(false); setText(name); }
   };

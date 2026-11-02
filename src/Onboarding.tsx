@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { enable } from "@tauri-apps/plugin-autostart";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChipGroup, DayPicker, TimeField } from "./fields";
 import { Hoot } from "./Hoot";
 import { addMinutes, checkCategories, CategoryDraft } from "./categoryRows";
@@ -43,8 +43,17 @@ export function Onboarding({ onDone, demo }: { onDone: () => void; demo?: boolea
   const problem = validate(s, "", "") || cats.errors.find(Boolean) || "";
   const firstCheckIn = time.work ? "" : addMinutes(workStart, interval);
 
+  const focusNew = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  // After Enter adds a row, the new row's Code field takes the focus.
+  useEffect(() => {
+    if (!focusNew.current) return;
+    focusNew.current = false;
+    listRef.current?.querySelector<HTMLInputElement>("[data-last] input")?.focus();
+  }, [rows.length]);
+
   const setRow = (i: number, patch: Partial<CategoryDraft>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const addRow = () => setRows([...rows, emptyRow()]);
+  const addRow = () => (setRows([...rows, emptyRow()]), (focusNew.current = true));
   // Enter adds the next row. It does not submit the form.
   const enterAdds = (i: number) => (e: React.KeyboardEvent) => {
     if (e.key !== "Enter") return;
@@ -108,14 +117,14 @@ export function Onboarding({ onDone, demo }: { onDone: () => void; demo?: boolea
             </Step>
 
           <Step n={3} title={<>Which Categories do you book on? <span className="wt-sub">Optional</span></>}>
-              <div className="wt-cat-rows">
+              <div className="wt-cat-rows" ref={listRef}>
                 {rows.map((r, i) => {
                   const used = !!(r.code.trim() || r.name.trim());
                   const color = (filled % 8) + 1;
                   if (used) filled++;
                   const error = cats.errors[i];
                   return (
-                    <div key={i}>
+                    <div key={i} data-last={i === rows.length - 1 ? "" : undefined}>
                       <div className="wt-cat-row">
                         <span className={`wt-dot${used ? "" : " is-empty"}`} title={COLOR_NAMES[color - 1]} style={{ "--dot": `var(--cat-${color}-solid)` } as React.CSSProperties} />
                         <input className="wt-input wt-code" aria-label="Code" placeholder="PSP-…" value={r.code} onChange={(e) => setRow(i, { code: e.target.value })} onKeyDown={enterAdds(i)} aria-invalid={!!error} />

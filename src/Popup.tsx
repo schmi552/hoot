@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { createContext, KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
-import { dateKey, formatHM, gapDue, instantAt, minutesBetween, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
+import { dateKey, gapDue, instantAt, parseHM, popupDue, recentEntries, Span, splitGap, ymdIn } from "./schedule/schedule";
 import { Absence, absenceSpans } from "./schedule/absences";
 import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meetings";
 import { CategoryCombo } from "./CategoryCombo";
@@ -150,7 +150,7 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => voi
         <span className="wt-sub">{time(now)} · Esc {saved ? "close" : "skip"}</span>
       </div>
       <div className="wt-thread" ref={thread} role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
-        {asked.current && <Say text="Are you working from home or in the office today?" />}
+        {asked.current && <Say text="Good morning! Do you work from home or in the office today?" />}
         {asked.current && place && <div className="wt-me">{place}</div>}
         {!askLocation && <Say text={question} mood={failed ? "problem" : "asking"} />}
         {lines.map((l, i) => (l.me ? <div key={i} className="wt-me">{l.text}</div> : <Say key={i} text={l.text} />))}
@@ -158,15 +158,15 @@ function Chat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => voi
       </div>
       {askLocation ? (
         <div className="wt-quick" role="group" aria-label="Workday location">
-          <button type="button" autoFocus className="wt-chip is-primary" onClick={() => setLocation("home")}>Home (H)</button>
-          <button type="button" className="wt-chip is-primary" onClick={() => setLocation("office")}>Office (O)</button>
-          <ErrorLine error={error} />
+          <button type="button" autoFocus className="wt-chip" onClick={() => setLocation("home")}>Home (H)</button>
+          <button type="button" className="wt-chip" style={{ borderColor: "var(--chip-border-hover)" }} onClick={() => setLocation("office")}>Office (O)</button>
+          {error && <ErrorLine error={error} />}
         </div>
       ) : !saved && (
         <>
           <div className="wt-quick" role="group" aria-label="Quick replies">
-            {last && <button type="button" className="wt-chip is-primary" onClick={() => save(true)}>Yes, still ({STILL_KEY})</button>}
-            {recents.map((r) => (
+            {last && <button type="button" className="wt-chip" onClick={() => save(true)}>Yes, still ({STILL_KEY})</button>}
+            {recents.filter((r) => !(last && r.description === last.description && r.categoryId === last.categoryId)).map((r) => ( // "Yes, still" already covers the last Entry
               <button type="button" key={r.id} className="wt-chip" title={categories.find((c) => c.id === r.categoryId)?.name} onClick={() => { setDescription(r.description); setCategoryId(r.categoryId); input.current?.focus(); }}>
                 {r.description}
               </button>
@@ -201,6 +201,7 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
   const { now, settings, spans, previous, recents, categories } = ask;
   const [choice, setChoice] = useState<"accept" | "split" | "leave" | null>(null); // the user's answer, shown as their own bubble
   const [from, setFrom] = useState(""); // "HH:MM", where the new part of a split starts
+  const [cutSet, setCutSet] = useState(false); // the split time is confirmed, so Category and description follow
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState(recents[0]?.categoryId ?? categories[0]?.id ?? 0);
   const [error, setError] = useState(categories.length ? "" : "Add a Category in Settings first.");
@@ -210,9 +211,10 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
   const time = (t: number) => new Date(t * 1000).toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" });
   const start = spans[0].startUtc;
   const end = spans[spans.length - 1].endUtc;
-  const minutes = minutesBetween(start, end) - spans.slice(1).reduce((sum, p, i) => sum + minutesBetween(spans[i].endUtc, p.startUtc), 0);
   const ymd = ymdIn(settings.tz, now);
   const canSplit = !!previous; // the part before the new time continues the last Entry
+
+  const splitting = choice === "split" && !cutSet; // the split step asks for the time first
 
   const choose = (c: "accept" | "split" | "leave") => (c === "split" && !canSplit ? undefined : setChoice(c));
   // The popup closes after a save or after "Leave empty". Esc unmounts it first, and the cleanup clears the timer.
@@ -222,11 +224,14 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
     return () => clearTimeout(timer);
   }, [saved, choice]);
 
+  const cutAt = () => (from ? instantAt(settings.tz, ymd, parseHM(from)) : NaN);
+  const confirmCut = () => (cutAt() > start && cutAt() < end ? (setError(""), setCutSet(true)) : setError("New from must be inside the Gap."));
+
   const save = async () => {
     let before: Span[] = [];
     let after = spans;
     if (choice === "split") {
-      const cut = from ? instantAt(settings.tz, ymd, parseHM(from)) : NaN;
+      const cut = cutAt();
       if (!previous || !(cut > start && cut < end)) return setError("New from must be inside the Gap.");
       [before, after] = splitGap(spans, [cut]);
       if (!before.length || !after.length) return setError("Each part must hold work time.");
@@ -257,7 +262,7 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
       if (k === "a") choose("accept");
       else if (k === "s") choose("split");
       else if (k === "l") choose("leave");
-    } else if (choice && choice !== "leave" && e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") save();
+    } else if (choice && choice !== "leave" && e.key === "Enter" && !saved && (e.target as HTMLElement).tagName !== "BUTTON") splitting ? confirmCut() : save();
   };
 
   return (
@@ -267,8 +272,9 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
         <span className="wt-sub">{time(now)} · Esc skip</span>
       </div>
       <div className="wt-thread" role="log" aria-live="polite" aria-label="Conversation with Work Tracker">
-        <Say text={`Nothing is logged from ${time(start)} to ${time(end)} (${formatHM(minutes)}). What did you do?`} mood={failed ? "problem" : "away"} />
+        <Say text={`I missed you from ${time(start)} to ${time(end)}. What happened in that time?`} mood={failed ? "problem" : "away"} />
         {choice && <div className="wt-me">{{ accept: "Accept it", split: "Split it", leave: "Leave it empty" }[choice]}</div>}
+        {choice === "split" && <Say text="At what time did you start something new? Before that, it was the last Entry." />}
         {saved && <Say text="Saved. See you next time!" mood="saved" />}
       </div>
       {!choice && (
@@ -278,20 +284,22 @@ function GapChat({ ask, onDone }: { ask: Ask; onDone: (promptedUtc?: number) => 
           <button type="button" className="wt-chip" onClick={() => choose("leave")}>Leave empty (L)</button>
         </div>
       )}
-      {(choice === "accept" || choice === "split") && !saved && (
+      {splitting && (
+        <div className="wt-quick" role="group" aria-label="Quick replies">
+          <label htmlFor="split-time" className="wt-label" style={{ minWidth: 0 }}>New from</label>
+          <input id="split-time" autoFocus className="wt-input" style={{ width: 90 }} type="time" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <button type="button" className="wt-chip" onClick={confirmCut}>OK (Enter)</button>
+          {error && <ErrorLine error={error} />}
+        </div>
+      )}
+      {(choice === "accept" || (choice === "split" && cutSet)) && !saved && (
         <div className="wt-composer">
-          {choice === "split" && (
-            <div className="wt-row">
-              <span className="wt-label">New from</span>
-              <input autoFocus className="wt-input" type="time" aria-label="New from" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </div>
-          )}
           <div className="wt-row">
             <span className="wt-label">Category</span>
             <div style={{ flex: 1 }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
           </div>
           <div className="wt-row">
-            <input autoFocus={choice === "accept"} className="wt-input" aria-label="What did you do" placeholder="What did you do?" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input autoFocus className="wt-input" aria-label="What did you do" placeholder="What did you do?" value={description} onChange={(e) => setDescription(e.target.value)} />
             <button type="button" className="wt-chip is-primary" onClick={save}>Save</button>
           </div>
           <ErrorLine error={error} retry={failed ? save : undefined} />

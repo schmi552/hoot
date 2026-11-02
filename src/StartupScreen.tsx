@@ -36,6 +36,7 @@ export function StartupScreen({ failure, onRecovered, demo }: { failure: Failure
 
   if (restoredDays !== null)
     return (
+      <div className="wt-startup-page">
       <main className="wt-startup" role="status">
         <header className="wt-startup-head">
           <Hoot px={5} mood="saved" />
@@ -46,6 +47,7 @@ export function StartupScreen({ failure, onRecovered, demo }: { failure: Failure
           <button className="wt-chip is-primary" onClick={onRecovered}>Continue</button>
         </div>
       </main>
+      </div>
     );
 
   const text = {
@@ -67,6 +69,7 @@ export function StartupScreen({ failure, onRecovered, demo }: { failure: Failure
   }[failure.kind];
 
   return (
+    <div className="wt-startup-page">
     <main className="wt-startup" role="alert">
       <header className="wt-startup-head">
         <Hoot px={5} mood="problem" />
@@ -85,13 +88,12 @@ export function StartupScreen({ failure, onRecovered, demo }: { failure: Failure
           </>
         )}
         <button className="wt-chip" onClick={quit}>Quit</button>
-      </div>
-      <div className="wt-startup-actions">
         {failure.kind !== "tooNew" && (
           <button className="wt-chip" onClick={() => navigator.clipboard.writeText(details(failure))}>Copy details</button>
         )}
         <button className="wt-chip" onClick={() => invoke("show_backups_folder")}>Show backups folder</button>
       </div>
     </main>
+    </div>
   );
 }

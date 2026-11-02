@@ -123,7 +123,7 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
           if (!problem) save();
         }}
       >
-        <div className="wt-fields">
+        <div className="wt-fields wt-fields-grid">
           <TimeField label="From" value={s.workStart} onChange={(workStart) => setS({ ...s, workStart })} invalid={!!time.work} />
           <TimeField label="To" value={s.workEnd} onChange={(workEnd) => setS({ ...s, workEnd })} invalid={!!time.work} />
           <div className="wt-field">
@@ -141,14 +141,17 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
         </div>
         {dated && (
           <div role="status" className="wt-notice wt-notice-row">
-            <span>
-              {before === after ? (
-                "The Workdays change."
-              ) : (
-                <>Expected per day changes from <b className="wt-mono">{hours(before)}</b> to <b className="wt-mono">{hours(after)}</b>.</>
-              )}{" "}
-              Weeks before the start date keep the old value.
-            </span>
+            <div className="wt-notice-text">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 7.5V11M8 5v.01" /></svg>
+              <span>
+                {before === after ? (
+                  "The Workdays change."
+                ) : (
+                  <>Expected per day changes from <b className="wt-mono">{hours(before)}</b> to <b className="wt-mono">{hours(after)}</b>.</>
+                )}{" "}
+                Weeks before the start date keep the old value.
+              </span>
+            </div>
             <label className="wt-notice-date">
               From
               <input className="wt-input wt-mono" type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} aria-invalid={start < today} />
@@ -182,7 +185,6 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
   const setTheme = (theme: Theme) => invoke("set_theme", { theme }).then(() => setLook({ ...look, theme }), fail);
   const setShowMascot = (showMascot: boolean) => invoke("set_show_mascot", { show: showMascot }).then(() => setLook({ ...look, showMascot }), fail);
 
-  const firstCheck = firstCheckIn(saved);
   return (
     <div className="wt-settings">
       <header className="wt-settings-head">
@@ -226,8 +228,7 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
               <input type="checkbox" checked={look.showMascot} onChange={(e) => setShowMascot(e.target.checked)} />
               Show the mascot
             </label>
-            {firstCheck && <span className="wt-hint">First check-in today at {firstCheck}.</span>}
-            <p className="wt-error" role="alert">{message}</p>
+            {message && <p className="wt-error" role="alert">{message}</p>}
           </section>
 
           <Backups tz={saved.tz} />

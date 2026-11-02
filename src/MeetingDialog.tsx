@@ -93,11 +93,11 @@ export function MeetingDialog({ settings, categories, series, ask, wholeSeries, 
       }}
     >
       <input className="wt-input" aria-label="Title" placeholder="Title" autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-      <div style={{ flex: 1 }}><CategoryCombo none options={categories} value={form.categoryId} onChange={(categoryId) => setForm({ ...form, categoryId })} /></div>
+      <div style={{ flex: "1 1 160px" }}><CategoryCombo none options={categories} value={form.categoryId} onChange={(categoryId) => setForm({ ...form, categoryId })} /></div>
       {form.source && <p className="wt-sub">{form.source}</p>}
       {rule && <p className="wt-sub">{repeatText(rule)}</p>}
-      <input className="wt-input" type="datetime-local" aria-label="Start" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
-      <input className="wt-input" type="number" min={5} step={5} aria-label="Duration in minutes" value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} />
+      <label className="wt-inline-field wt-sub">Start <input className="wt-input" type="datetime-local" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></label>
+      <label className="wt-inline-field wt-sub">Length <input className="wt-input" type="number" min={5} step={5} value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} /> min</label>
       {!form.editing && (
         <select className="wt-input" aria-label="Repeat" value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value as Repeat })}>
           {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
