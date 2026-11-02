@@ -53,7 +53,7 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
             {categories.map((c) => (
               <tr key={c.id} className={picking === c.id ? "is-open" : undefined}>
                 <td className="wt-color-cell">
-                  <button type="button" className={`wt-dot wt-dot-btn wt-dot-lg${owner ? " is-used" : ""}`} style={dot(c.color)} aria-label={`Color of ${c.name}`} aria-expanded={picking === c.id} onClick={() => setPicking(picking === c.id ? 0 : c.id)} />
+                  <button type="button" className="wt-dot wt-dot-btn wt-dot-lg" style={dot(c.color)} aria-label={`Color of ${c.name}`} aria-expanded={picking === c.id} onClick={() => setPicking(picking === c.id ? 0 : c.id)} />
                   {picking === c.id && (
                     <div className="wt-swatches" role="group" aria-label="Category color" onKeyDown={(e) => e.key === "Escape" && setPicking(0)}>
                       {COLORS.map((n) => {
@@ -62,7 +62,7 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
                           <button
                             key={n}
                             type="button"
-                            className="wt-dot wt-dot-btn wt-dot-lg"
+                            className={`wt-dot wt-dot-btn wt-dot-lg${owner ? " is-used" : ""}`}
                             style={dot(n)}
                             aria-label={`${COLOR_NAMES[n - 1]}${owner ? `, used by ${owner.code}` : ""}`}
                             aria-pressed={c.color === n}
