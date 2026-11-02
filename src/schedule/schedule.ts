@@ -18,13 +18,22 @@ export function expectedMinutes(s: { workStart: string; workEnd: string; lunchSt
 /** A calendar day in a zone, as the numbers a person reads: month is 1 to 12. */
 export type Ymd = { y: number; m: number; d: number };
 
+const formats = new Map<string, Intl.DateTimeFormat>();
+/** A formatter for these options. Making one costs much more than using one, and a render asks for hundreds, so each is made once. */
+export function formatter(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = locale + JSON.stringify(options);
+  let f = formats.get(key);
+  if (!f) formats.set(key, (f = new Intl.DateTimeFormat(locale, options)));
+  return f;
+}
+
 /** A day as "YYYY-MM-DD", the key of a Workday location. */
 export const dateKey = ({ y, m, d }: Ymd) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
 /** Year, month and day of an instant (epoch seconds) in the IANA zone `tz`. */
 export function ymdIn(tz: string, instantSec: number): Ymd {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" })
+    formatter("en-CA", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" })
       .formatToParts(instantSec * 1000)
       .map((x) => [x.type, Number(x.value)]),
   );
@@ -36,7 +45,7 @@ export function instantAt(tz: string, { y, m, d }: Ymd, minutes = 0): number {
   const wall = Date.UTC(y, m - 1, d, 0, minutes) / 1000;
   const offsetAt = (t: number) => {
     const w = Object.fromEntries(
-      new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" })
+      formatter("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" })
         .formatToParts(t * 1000)
         .map((x) => [x.type, Number(x.value)]),
     );

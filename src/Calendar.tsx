@@ -12,7 +12,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 import {
-  dateKey, dayBoundsIn, expectedOn, formatHM, instantAt, isWorkday, loggedMinutes, nextCheckIn, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, popupSpans, resizedEnd, settingsOn, SettingsRow, Span, STEP, weekday, Ymd, ymdIn,
+  dateKey, dayBoundsIn, expectedOn, formatHM, formatter, instantAt, isWorkday, loggedMinutes, nextCheckIn, nextFreeSlot, nextFreeStart, overlapsAny, parseHM, popupSpans, resizedEnd, settingsOn, SettingsRow, Span, STEP, weekday, Ymd, ymdIn,
 } from "./schedule/schedule";
 import { Absence, ABSENCE_KINDS, AbsenceKind, absenceSpans, absenceTitle } from "./schedule/absences";
 import { barSegments, DayTotal, daysIn, entryText, gridRange, hiddenDays, rowTotals, shortDay, showsDayTotal, weekShares } from "./schedule/week";
@@ -34,6 +34,10 @@ type Change = { from: Entry | null; to: Entry | null };
 
 const DEFAULT_MINUTES = 60;
 const SLOT_MINUTES = 30;
+// FullCalendar compares its options by identity, so options that do not change must be the same object each render.
+const SLOT_DURATION = { minutes: SLOT_MINUTES };
+const SLOT_HEADER_FORMAT = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
+const VIEWS = { dayGridMonth: { editable: false } }; // the month view only shows and navigates
 const DAY = 86_400; // shortcut: a day step is 24 hours, so it is an hour off across a DST change; upgrade with instantAt if that matters
 const secs = (d: Date) => d.getTime() / 1000;
 /** The Absence dialog. A full-day Absence uses `from` and `to` as dates; a part-day Absence uses them as "YYYY-MM-DDTHH:MM". */
@@ -122,15 +126,18 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   useEffect(() => void invoke<MeetingSeries[]>("list_meetings").then(setSeries), [reload]);
   useEffect(() => void invoke<MeetingException[]>("list_meeting_exceptions").then(setExceptions), [reload]);
   useEffect(() => void invoke<Absence[]>("list_absences").then(setAbsences), [reload]);
-  const meetings = range ? expandMeetings(series, exceptions, range[0], range[1]) : [];
-  const away = absenceSpans(absences, settings.tz);
+  const meetings = useMemo(() => (range ? expandMeetings(series, exceptions, range[0], range[1]) : []), [series, exceptions, range]);
+  const away = useMemo(() => absenceSpans(absences, settings.tz), [absences, settings.tz]);
   const settingsAt = (d: Ymd) => (rows.length ? settingsOn(rows, d) : settings); // the settings row valid on day `d`
   // Hide the days that are no Workday and hold no item.
   const hidden = range && isWeek ? hiddenDays(settings.tz, daysIn(settings.tz, range[0], range[1]), (d) => isWorkday(settingsAt(d).workdays, d), [...entries, ...meetings, ...away]) : [];
+  const hiddenKey = hidden.join();
+  const hiddenStable = useMemo(() => hidden, [hiddenKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const businessHours = useMemo(() => ({ daysOfWeek: [...settings.workdays].map(Number), startTime: settings.workStart, endTime: settings.workEnd }), [settings]);
   // A full-day Absence has its own row, so only part-day Absences widen the grid.
   const timed = [...entries, ...meetings, ...away.filter((_, i) => !absences[i].startDate)];
   const hours = gridRange(settings.workStart, settings.workEnd, settings.tz, timed);
-  const clock = (sec: number) => new Intl.DateTimeFormat("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(sec * 1000);
+  const clock = (sec: number) => formatter("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(sec * 1000);
   const hourText = (h: number) => `${String(h).padStart(2, "0")}:00:00`;
   useEffect(() => {
     const t = setTimeout(() => setNotice(""), 4000);
@@ -342,7 +349,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     setLocMenu("");
     invoke("set_workday_location", { date: key, location }).then(load, fail);
   };
-  const days = range && isWeek ? daysIn(settings.tz, range[0], range[1]) : [];
+  const days = useMemo(() => (range && isWeek ? daysIn(settings.tz, range[0], range[1]) : []), [range, isWeek, settings.tz]);
   const todayKey = dateKey(ymdIn(settings.tz, Date.now() / 1000));
   const dayTotals: DayTotal[] = days.map((day) => {
     const [from, to] = dayBoundsIn(settings.tz, day);
@@ -383,6 +390,46 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   }, [empty, settings, series, exceptions, absences]); // eslint-disable-line react-hooks/exhaustive-deps
   const name = (id: number | null) => categories.find((c) => c.id === id)?.name ?? "";
   const catClass = (id: number | null) => `wt-cat-${categories.find((c) => c.id === id)?.color ?? "none"}`; // no Category, or an unknown one: gray
+
+  const events = useMemo(
+    () => [
+      ...(isWeek ? entries : []).map((e) => ({
+        id: String(e.id),
+        title: `${name(e.categoryId)}: ${e.description}`,
+        start: new Date(e.startUtc * 1000),
+        end: new Date(e.endUtc * 1000),
+        className: `wt-entry ${catClass(e.categoryId)}${e.id === selected ? " wt-selected" : ""}`,
+        extendedProps: { entry: e },
+      })),
+      ...(isWeek ? meetings : []).map((m) => ({
+        id: `m${m.seriesId}-${m.startUtc}`,
+        title: m.categoryId === null ? m.title : `${name(m.categoryId)}: ${m.title}`,
+        start: new Date(m.startUtc * 1000),
+        end: new Date(m.endUtc * 1000),
+        editable: false,
+        className: `wt-meeting ${catClass(m.categoryId)}${pickedMeeting && pickedMeeting.seriesId === m.seriesId && pickedMeeting.startUtc === m.startUtc ? " wt-selected" : ""}`,
+        extendedProps: { meeting: m, repeats: !!series.find((x) => x.id === m.seriesId)?.rrule },
+      })),
+      ...absences.map((a) => ({
+        id: `a${a.id}`,
+        title: absenceTitle(a),
+        ...(a.startDate ? { start: a.startDate, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), allDay: true } : { start: new Date(a.startUtc! * 1000), end: new Date(a.endUtc! * 1000) }),
+        editable: false,
+        className: `wt-absence${pickedAbsence?.id === a.id ? " wt-selected" : ""}`,
+        extendedProps: { absence: a },
+      })),
+      // The off-hours shade is the businessHours below. Each day also gets a Lunch band, and a full-day Absence hatches its whole column.
+      ...(isWeek ? days.filter((d) => isWorkday(settingsAt(d).workdays, d)).map((d) => ({
+        start: new Date(instantAt(settings.tz, d, parseHM(settingsAt(d).lunchStart)) * 1000),
+        end: new Date(instantAt(settings.tz, d, parseHM(settingsAt(d).lunchEnd)) * 1000),
+        display: "background",
+        className: "wt-lunchband",
+      })) : []),
+      ...(isWeek ? absences.filter((a) => a.startDate).map((a) => ({ start: a.startDate!, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), display: "background", className: "wt-absence-bg" })) : []),
+      ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
+    ],
+    [entries, meetings, absences, days, picked, selected, pickedMeeting, pickedAbsence, isWeek, categories, series, settings, rows], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   return (
     <main
@@ -535,25 +582,25 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, classicTheme]}
         timeZone={settings.tz}
         initialView="timeGridWeek"
-        hiddenDays={hidden}
-        businessHours={{ daysOfWeek: [...settings.workdays].map(Number), startTime: settings.workStart, endTime: settings.workEnd }}
+        hiddenDays={hiddenStable}
+        businessHours={businessHours}
         slotMinTime={hourText(hours.minHour)}
         slotMaxTime={hourText(hours.maxHour)}
         slotMinHeight={32}
         slotHeaderInterval="01:00"
-        slotHeaderFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+        slotHeaderFormat={SLOT_HEADER_FORMAT}
         slotLaneClass={(i) => i.isMinor && "wt-slot-half"}
         headerToolbar={false}
         firstDay={1}
         nowIndicator
         height="100%"
-        slotDuration={{ minutes: SLOT_MINUTES }}
+        slotDuration={SLOT_DURATION}
         snapDuration="00:15:00"
         selectable
         selectMirror
         selectOverlap={(ev) => !!ev.extendedProps.meeting || !!ev.extendedProps.absence} // a Meeting or an Absence never blocks an Entry
         editable
-        views={{ dayGridMonth: { editable: false } }} // the month view only shows and navigates
+        views={VIEWS}
         eventClick={(i) => {
           const m = i.event.extendedProps.meeting as MeetingOccurrence | undefined;
           const a = i.event.extendedProps.absence as Absence | undefined;
@@ -597,42 +644,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           setMonthStart(secs(i.view.currentStart));
           setRange(week ? [secs(i.view.currentStart), secs(i.view.currentEnd)] : [secs(i.start), secs(i.end)]); // a hidden day must still load its items
         }}
-        events={[
-          ...(isWeek ? entries : []).map((e) => ({
-            id: String(e.id),
-            title: `${name(e.categoryId)}: ${e.description}`,
-            start: new Date(e.startUtc * 1000),
-            end: new Date(e.endUtc * 1000),
-            className: `wt-entry ${catClass(e.categoryId)}${e.id === selected ? " wt-selected" : ""}`,
-            extendedProps: { entry: e },
-          })),
-          ...(isWeek ? meetings : []).map((m) => ({
-            id: `m${m.seriesId}-${m.startUtc}`,
-            title: m.categoryId === null ? m.title : `${name(m.categoryId)}: ${m.title}`,
-            start: new Date(m.startUtc * 1000),
-            end: new Date(m.endUtc * 1000),
-            editable: false,
-            className: `wt-meeting ${catClass(m.categoryId)}${pickedMeeting && pickedMeeting.seriesId === m.seriesId && pickedMeeting.startUtc === m.startUtc ? " wt-selected" : ""}`,
-            extendedProps: { meeting: m, repeats: !!series.find((x) => x.id === m.seriesId)?.rrule },
-          })),
-          ...absences.map((a) => ({
-            id: `a${a.id}`,
-            title: absenceTitle(a),
-            ...(a.startDate ? { start: a.startDate, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), allDay: true } : { start: new Date(a.startUtc! * 1000), end: new Date(a.endUtc! * 1000) }),
-            editable: false,
-            className: `wt-absence${pickedAbsence?.id === a.id ? " wt-selected" : ""}`,
-            extendedProps: { absence: a },
-          })),
-          // The off-hours shade is the businessHours below. Each day also gets a Lunch band, and a full-day Absence hatches its whole column.
-          ...(isWeek ? days.filter((d) => isWorkday(settingsAt(d).workdays, d)).map((d) => ({
-            start: new Date(instantAt(settings.tz, d, parseHM(settingsAt(d).lunchStart)) * 1000),
-            end: new Date(instantAt(settings.tz, d, parseHM(settingsAt(d).lunchEnd)) * 1000),
-            display: "background",
-            className: "wt-lunchband",
-          })) : []),
-          ...(isWeek ? absences.filter((a) => a.startDate).map((a) => ({ start: a.startDate!, end: Temporal.PlainDate.from(a.endDate!).add({ days: 1 }).toString(), display: "background", className: "wt-absence-bg" })) : []),
-          ...(picked ? [{ start: picked, end: new Date(picked.getTime() + SLOT_MINUTES * 60_000), display: "background" }] : []),
-        ]}
+        events={events}
         eventContent={(i) => {
           const { entry, meeting, absence, repeats } = i.event.extendedProps as { entry?: Entry; meeting?: MeetingOccurrence; absence?: Absence; repeats?: boolean };
           const [start, end] = [secs(i.event.start!), secs(i.event.end!)]; // during a drag these are the new times
