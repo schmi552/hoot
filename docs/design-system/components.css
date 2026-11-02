@@ -322,7 +322,11 @@ button.wt-icon-btn:hover { color: var(--color-text); }
   background: var(--calendar-bg);
   color: var(--calendar-fg);
   font: var(--text-body) var(--font-body);
+  /* The window does not scroll. The week grid scrolls inside it; Month and a tall banner scroll the whole area. */
+  box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; overflow-y: auto;
 }
+.wt-calendar > * { flex: none; }
+.wt-calendar > .wt-week { flex: 1 1 auto; min-height: 420px; }
 .wt-editor > .wt-input { flex: 1 1 200px; width: auto; min-width: 0; }
 .wt-editor > div { min-width: 0; }
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
@@ -376,9 +380,10 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 /* ---------- Week view details: sidebar, day header, preview, empty state ---------- */
 .wt-week { display: flex; flex-direction: column; gap: var(--space-md); }
 .wt-week-grid { position: relative; min-width: 0; flex: 1; }
+.wt-week .wt-week-grid { min-height: 420px; }
 .wt-side { display: flex; flex-direction: column; gap: var(--space-sm); padding: var(--space-md); border-radius: var(--radius-container); background: var(--color-surface-sunken); }
 @media (min-width: 1000px) {
-  .wt-week { flex-direction: row; align-items: flex-start; }
+  .wt-week { flex-direction: row; align-items: stretch; }
   .wt-side { flex: none; width: var(--sidebar-width); }
 }
 .wt-total { font: 600 var(--text-total) var(--font-mono); }

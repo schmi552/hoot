@@ -496,7 +496,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         headerToolbar={false}
         firstDay={1}
         nowIndicator
-        height="auto"
+        height={isWeek ? "100%" : "auto"}
         slotDuration={{ minutes: SLOT_MINUTES }}
         snapDuration="00:15:00"
         selectable
