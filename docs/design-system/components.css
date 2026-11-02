@@ -232,6 +232,9 @@ html, body { margin: 0; background: var(--color-surface); color: var(--color-tex
 .wt-settings { min-height: 100vh; display: flex; flex-direction: column; background: var(--shell-bg); color: var(--color-text); font: var(--text-body) / var(--leading-body) var(--font-body); }
 .wt-settings-head { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: var(--border-width) solid var(--color-border); }
 .wt-section h2 { margin: 0; font-size: var(--text-title); font-weight: 600; }
+.wt-enter { border: var(--border-width) solid var(--chip-border); border-radius: var(--radius-control); color: var(--chip-fg); }
+.wt-enter:not(:disabled) { background: var(--chip-bg-on); border-color: var(--chip-bg-on); color: var(--chip-fg-on); }
+.wt-enter:disabled { opacity: 0.45; cursor: default; }
 .wt-back { border: var(--border-width) solid var(--chip-border); border-radius: var(--radius-control); color: var(--chip-fg); }
 .wt-settings-body { display: flex; flex-wrap: wrap; gap: var(--space-xl); padding: var(--space-xl) var(--space-lg); align-items: flex-start; }
 .wt-settings-nav { flex: 1 1 200px; max-width: 240px; display: flex; flex-direction: column; gap: 2px; }
@@ -457,9 +460,12 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-swatches .wt-dot-btn[aria-pressed="true"] { border: 3px solid var(--color-surface); box-sizing: border-box; }
 .wt-swatches .wt-hint { grid-column: 1 / -1; }
 .wt-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-md); }
-.wt-table-card { overflow-x: auto; border: var(--border-width) solid var(--color-border); border-radius: 10px; }
+.wt-table-card { border: var(--border-width) solid var(--color-border); border-radius: 10px; }
 .wt-table-card .wt-table { min-width: 520px; font-size: var(--text-control); }
 .wt-table-card .wt-table th { background: var(--color-surface-sunken); }
+.wt-table-card .wt-table th:first-child { border-top-left-radius: 9px; }
+.wt-table-card .wt-table th:last-child { border-top-right-radius: 9px; }
+@media (max-width: 640px) { .wt-table-card { overflow-x: auto; } } /* the color choices open below a row, so the card clips only in a narrow window */
 .wt-table-card .wt-table :is(th, td) { padding: var(--space-sm) var(--space-md); }
 .wt-table-card .wt-table tr:last-child td { border-bottom: 0; }
 .wt-table-card .wt-table thead th { border-bottom: 0; }

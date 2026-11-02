@@ -38,7 +38,11 @@ const handlers: Record<string, (a: any) => any> = {
   set_show_mascot: (a) => void (appearance = { ...appearance, showMascot: a.show }),
   list_categories: () => categories,
   used_categories: () => [1, 2, 3],
-  add_category: (a) => void categories.push({ id: nextId++, code: a.code, name: a.name, color: 5 }),
+  add_category: (a) => {
+    const c = { id: nextId++, code: a.code, name: a.name, color: 5 };
+    categories.push(c);
+    return c;
+  },
   update_category: (a) => void Object.assign(categories.find((c) => c.id === a.id)!, { code: a.code, color: a.color }),
   remove_category: () => {},
   list_entries: (a) => entries.filter((e) => e.endUtc > a.fromUtc && e.startUtc < a.toUtc),

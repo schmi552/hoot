@@ -14,11 +14,43 @@ const COLOR_NAMES = ["Blue", "Orange", "Teal", "Purple", "Green", "Pink", "Amber
 const dot = (color: number) => ({ "--dot": `var(--cat-${color}-solid)` }) as React.CSSProperties;
 
 /** The Categories table. Every change acts at once. */
+function EnterIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 3v5.5a1.5 1.5 0 0 1-1.5 1.5H3m0 0 3-3m-3 3 3 3" />
+    </svg>
+  );
+}
+
+/** The color choices of one Category. A color that another Category uses is faded, and can still be picked. */
+function Swatches({ categories, self, color, onPick, onClose }: { categories: Category[]; self: number; color: number | null; onPick: (n: number) => void; onClose: () => void }) {
+  return (
+    <div className="wt-swatches" role="group" aria-label="Category color" onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), onClose())}>
+      {COLORS.map((n) => {
+        const owner = categories.find((o) => o.id !== self && o.color === n);
+        return (
+          <button
+            key={n}
+            type="button"
+            className={`wt-dot wt-dot-btn wt-dot-lg${owner ? " is-used" : ""}`}
+            style={dot(n)}
+            aria-label={`${COLOR_NAMES[n - 1]}${owner ? `, used by ${owner.code}` : ""}`}
+            aria-pressed={color === n}
+            onClick={() => onPick(n)}
+          />
+        );
+      })}
+      <span className="wt-hint">Faded = used by another Category.</span>
+    </div>
+  );
+}
+
 export function Categories({ settings, categories, refresh }: { settings: Settings; categories: Category[]; refresh: () => void }) {
   const [used, setUsed] = useState<number[]>([]);
   const [minutes, setMinutes] = useState<Record<number, number>>({});
   const [picking, setPicking] = useState(0); // the id of the row that shows its color choices
-  const [draft, setDraft] = useState<{ code: string; name: string } | null>(null);
+  const [draft, setDraft] = useState<{ code: string; name: string; color: number | null } | null>(null); // no color: the store picks the next one
+  const [pickingDraft, setPickingDraft] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -35,14 +67,16 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
   const add = () => {
     if (!draft || taken || !(draft.code.trim() || draft.name.trim())) return;
     const code = draft.code.trim();
-    invoke("add_category", { code, name: draft.name.trim() || code }).then(() => (setDraft(null), done()), fail);
+    invoke<Category>("add_category", { code, name: draft.name.trim() || code })
+      .then((c) => (draft.color && draft.color !== c.color ? invoke("update_category", { id: c.id, code: c.code, color: draft.color }) : undefined))
+      .then(() => (setDraft(null), setPickingDraft(false), done()), fail);
   };
 
   return (
     <section id="cats" className="wt-section">
       <div className="wt-section-head">
         <h2>Categories</h2>
-        <button type="button" className="wt-chip" disabled={!!draft} onClick={() => setDraft({ code: "", name: "" })}>Add Category</button>
+        <button type="button" className="wt-chip" disabled={!!draft} onClick={() => setDraft({ code: "", name: "", color: null })}>Add Category</button>
       </div>
       <div className="wt-table-card">
         <table className="wt-table">
@@ -55,23 +89,7 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
                 <td className="wt-color-cell">
                   <button type="button" className="wt-dot wt-dot-btn wt-dot-lg" style={dot(c.color)} aria-label={`Color of ${c.name}`} aria-expanded={picking === c.id} onClick={() => setPicking(picking === c.id ? 0 : c.id)} />
                   {picking === c.id && (
-                    <div className="wt-swatches" role="group" aria-label="Category color" onKeyDown={(e) => e.key === "Escape" && setPicking(0)}>
-                      {COLORS.map((n) => {
-                        const owner = categories.find((o) => o.id !== c.id && o.color === n);
-                        return (
-                          <button
-                            key={n}
-                            type="button"
-                            className={`wt-dot wt-dot-btn wt-dot-lg${owner ? " is-used" : ""}`}
-                            style={dot(n)}
-                            aria-label={`${COLOR_NAMES[n - 1]}${owner ? `, used by ${owner.code}` : ""}`}
-                            aria-pressed={c.color === n}
-                            onClick={() => invoke("update_category", { id: c.id, code: c.code, color: n }).then(() => (setPicking(0), done()), fail)}
-                          />
-                        );
-                      })}
-                      <span className="wt-hint">Faded = used by another Category.</span>
-                    </div>
+                    <Swatches categories={categories} self={c.id} color={c.color} onPick={(n) => invoke("update_category", { id: c.id, code: c.code, color: n }).then(() => (setPicking(0), done()), fail)} onClose={() => setPicking(0)} />
                   )}
                 </td>
                 <td className="wt-mono">{c.code}</td>
@@ -85,12 +103,17 @@ export function Categories({ settings, categories, refresh }: { settings: Settin
               </tr>
             ))}
             {draft && (
-              <tr onKeyDown={(e) => (e.key === "Enter" ? (e.preventDefault(), add()) : e.key === "Escape" && setDraft(null))}>
-                <td><span className="wt-dot wt-dot-lg is-empty" /></td>
+              <tr onKeyDown={(e) => (e.key === "Enter" ? (e.preventDefault(), add()) : e.key === "Escape" && (setDraft(null), setPickingDraft(false)))}>
+                <td className="wt-color-cell">
+                  <button type="button" className={`wt-dot wt-dot-btn wt-dot-lg${draft.color ? "" : " is-empty"}`} style={draft.color ? dot(draft.color) : undefined} aria-label="Color of the new Category" aria-expanded={pickingDraft} onClick={() => setPickingDraft(!pickingDraft)} />
+                  {pickingDraft && <Swatches categories={categories} self={0} color={draft.color} onPick={(n) => (setDraft({ ...draft, color: n }), setPickingDraft(false))} onClose={() => setPickingDraft(false)} />}
+                </td>
                 <td><input className="wt-input wt-mono" aria-label="New Category code" placeholder="Code" size={8} autoFocus value={draft.code} aria-invalid={taken} onChange={(e) => setDraft({ ...draft, code: e.target.value })} /></td>
                 <td><input className="wt-input" aria-label="New Category name" placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></td>
                 <td />
-                <td />
+                <td className="wt-num">
+                  <button type="button" className="wt-icon-btn wt-enter" aria-label="Save Category (Enter)" title="Save (Enter)" disabled={taken || !(draft.code.trim() || draft.name.trim())} onClick={add}><EnterIcon /></button>
+                </td>
               </tr>
             )}
           </tbody>
