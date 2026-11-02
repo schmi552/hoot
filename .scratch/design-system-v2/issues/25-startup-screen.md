@@ -11,4 +11,4 @@ Spec stories: 120 to 122.
 - [x] Each of the three cases shows its own text.
 - [x] The restore button shows the real date of the newest backup. It is disabled when there is no backup.
 - [x] "Copy details" copies the error. "Show backups folder" opens the folder.
-- [ ] The screen matches the board in light and dark.
+- [x] The screen matches the board in light and dark.
