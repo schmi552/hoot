@@ -15,6 +15,12 @@
   src: url("../../src/assets/fonts/PixelifySans.woff2") format("woff2");
 }
 
+/* The window base. Without it a dark theme on a light system shows white edges and light native controls. */
+html { color-scheme: light dark; }
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+html, body { margin: 0; background: var(--color-surface); color: var(--color-text); }
+
 /* ---------- Popup ---------- */
 .wt-popup {
   background: var(--popup-bg);
@@ -68,6 +74,7 @@
   animation: wt-in var(--motion-enter) var(--motion-ease);
 }
 .wt-bubble, .wt-me {
+  overflow-wrap: anywhere;
   padding: var(--bubble-py) var(--bubble-px);
   max-width: var(--bubble-max-width);
   line-height: var(--leading-body);
@@ -90,7 +97,7 @@
 .wt-label { color: var(--color-text-muted); font-size: var(--text-caption); min-width: var(--label-min-width); }
 
 /* The popup fills its own window. */
-.wt-popup--window { display: flex; flex-direction: column; height: 100vh; border-radius: 0; }
+.wt-popup--window { display: flex; flex-direction: column; height: 100vh; border-radius: 0; box-shadow: none; }
 .wt-popup--window .wt-thread { flex: 1; max-height: none; }
 
 /* ---------- Controls ---------- */
@@ -116,6 +123,7 @@
 .wt-chip.is-danger { color: var(--chip-danger-fg); }
 
 .wt-input {
+  box-sizing: border-box;
   width: 100%;
   min-height: var(--input-height);
   padding: 0 var(--space-sm);
@@ -308,6 +316,8 @@ button.wt-icon-btn:hover { color: var(--color-text); }
   color: var(--calendar-fg);
   font: var(--text-body) var(--font-body);
 }
+.wt-editor > .wt-input { flex: 1 1 200px; width: auto; min-width: 0; }
+.wt-editor > div { min-width: 0; }
 .wt-editor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); }
 .wt-selected { outline: var(--selected-ring); outline-offset: var(--selected-ring-offset); }
 /* Event kinds. A Category class sets the three colors; a Meeting without a Category is gray. */

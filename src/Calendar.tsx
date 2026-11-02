@@ -432,8 +432,8 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           }}
         >
           <span className="wt-sub">
-            {slot.start.toLocaleString([], { timeZone: settings.tz, weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
-            {slot.end.toLocaleTimeString([], { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" })}
+            {slot.start.toLocaleString("en-GB", { timeZone: settings.tz, weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
+            {slot.end.toLocaleTimeString("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" })}
           </span>
           <div style={{ flex: 1 }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
           <input className="wt-input" aria-label="Description" autoFocus value={description} onChange={(e) => setDescription(e.target.value)} />
