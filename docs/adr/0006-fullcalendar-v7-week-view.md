@@ -1,3 +1,5 @@
 # Use FullCalendar v7 for the calendar and map its theme to our tokens
 
 The week view and month view use FullCalendar v7 (MIT) from `@fullcalendar/react`, with its `temporal-polyfill` peer dependency. We build the Entry rules ourselves: no overlap, keyboard moves and per-occurrence exceptions. The classic theme brings its own colours, so `.wt-calendar` sets the `--fc-classic-*` variables from `--calendar-*` component tokens, and the week view follows the light and dark themes. We did not choose a hand-made grid, because drag, snap and time-grid layout are a large amount of work. We did not choose FullCalendar v6, because v7 is the current line. One known cost: the Date values that v7 gives to callbacks for a named `timeZone` must be checked on macOS and Windows.
+
+Note (design system v2): FullCalendar draws the time grid, the drag and the snap. We build the rest ourselves to match the boards: the day header (date, location pill, hours), the Lunch band, greyed hours outside work time, the Meeting and Absence strips, the Selected panel with shortcut hints, and the Month legend and day totals.
