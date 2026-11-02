@@ -40,6 +40,12 @@ const secs = (d: Date) => d.getTime() / 1000;
 type AbsenceForm = { kind: AbsenceKind; label: string; allDay: boolean; from: string; to: string };
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
+/** The nearest ancestor that scrolls up and down. */
+const scrollerOf = (e: Element | null | undefined) => {
+  while (e && !/auto|scroll/.test(getComputedStyle(e).overflowY)) e = e.parentElement;
+  return e as HTMLElement | null;
+};
+
 export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboarding }: { settings: Settings; onSettings: () => void; onDebugStartup: () => void; onDebugOnboarding: () => void }) {
   const calendar = useRef<CalendarRef>(null);
   const [range, setRange] = useState<[number, number] | null>(null);
@@ -336,9 +342,18 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   }));
   const monthRows = Array.from({ length: monthDays.length / 7 }, (_, r) => rowTotals(monthDays.slice(r * 7, r * 7 + 7).map((d) => monthStats.get(dateKey(d))!)));
   useLayoutEffect(() => {
-    const cell = monthEl.current?.querySelector(".wt-month-cell");
-    if (cell) setWeekColTop(cell.getBoundingClientRect().top - monthEl.current!.getBoundingClientRect().top - 26); // 26 is --month-head-height
+    const scroller = scrollerOf(monthEl.current?.querySelector(".wt-month-cell"));
+    if (scroller) setWeekColTop(scroller.getBoundingClientRect().top - monthEl.current!.getBoundingClientRect().top - 26); // 26 is --month-head-height
   }); // after every render: the toolbar and the grid can move without a change of ours
+  const weekColRows = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The Week column has no scroll of its own. It follows the month grid.
+    const grid = scrollerOf(monthEl.current?.querySelector(".wt-month-cell"));
+    if (!grid || !weekColRows.current) return;
+    const sync = () => (weekColRows.current!.scrollTop = grid.scrollTop);
+    grid.addEventListener("scroll", sync);
+    return () => grid.removeEventListener("scroll", sync);
+  });
   const shown = days.filter((d) => !hidden.includes(weekday(d)));
   const title = isWeek ? (shown.length ? weekTitle(shown[0], shown[shown.length - 1]) : "") : monthStart ? monthTitle(ymdIn(settings.tz, monthStart)) : "";
   const empty = isWeek && !!range && !entries.length;
@@ -496,7 +511,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         headerToolbar={false}
         firstDay={1}
         nowIndicator
-        height={isWeek ? "100%" : "auto"}
+        height="100%"
         slotDuration={{ minutes: SLOT_MINUTES }}
         snapDuration="00:15:00"
         selectable
@@ -676,12 +691,14 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
       {!isWeek && (
         <div className="wt-weekcol" aria-label="Week totals" style={{ marginTop: weekColTop }}>
           <div className="wt-weekcol-head">Week</div>
-          {monthRows.map((r, n) => (
-            <div key={n} className="wt-weekcol-row">
-              <b>{formatHM(r.logged)}</b>
-              <span>of {formatHM(r.expected)}</span>
-            </div>
-          ))}
+          <div ref={weekColRows} className="wt-weekcol-rows">
+            {monthRows.map((r, n) => (
+              <div key={n} className="wt-weekcol-row">
+                <b>{formatHM(r.logged)}</b>
+                <span>of {formatHM(r.expected)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {isWeek && (
