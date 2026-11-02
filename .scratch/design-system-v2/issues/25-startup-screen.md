@@ -8,7 +8,7 @@ Spec stories: 120 to 122.
 
 **Status:** done
 
-- [ ] Each of the three cases shows its own text.
-- [ ] The restore button shows the real date of the newest backup. It is disabled when there is no backup.
-- [ ] "Copy details" copies the error. "Show backups folder" opens the folder.
+- [x] Each of the three cases shows its own text.
+- [x] The restore button shows the real date of the newest backup. It is disabled when there is no backup.
+- [x] "Copy details" copies the error. "Show backups folder" opens the folder.
 - [ ] The screen matches the board in light and dark.
