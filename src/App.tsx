@@ -14,14 +14,17 @@ export function App() {
   const [demoCount, setDemoCount] = useState(0);
   const showDemo = () => (setDemo(SAMPLE_FAILURES[demoCount % SAMPLE_FAILURES.length]), setDemoCount(demoCount + 1));
 
+  const [demoOnboarding, setDemoOnboarding] = useState(false);
+
   if (failure === undefined) return null;
   if (failure) return <StartupScreen failure={failure} onRecovered={checkStartup} />;
   if (demo) return <StartupScreen demo failure={demo} onRecovered={() => setDemo(null)} />;
-  return <Tracker onDebugStartup={showDemo} />;
+  if (demoOnboarding) return <Onboarding demo onDone={() => setDemoOnboarding(false)} />;
+  return <Tracker onDebugStartup={showDemo} onDebugOnboarding={() => setDemoOnboarding(true)} />;
 }
 
 /** Shows Onboarding until settings exist. Then the app, with Settings one click away. */
-function Tracker({ onDebugStartup }: { onDebugStartup: () => void }) {
+function Tracker({ onDebugStartup, onDebugOnboarding }: { onDebugStartup: () => void; onDebugOnboarding: () => void }) {
   const [settings, setSettings] = useState<Settings | null | undefined>(undefined);
   const [editing, setEditing] = useState(false);
   const load = () => invoke<Settings | null>("get_settings").then(setSettings);
@@ -40,5 +43,5 @@ function Tracker({ onDebugStartup }: { onDebugStartup: () => void }) {
         onBack={() => setEditing(false)}
       />
     );
-  return <Calendar settings={settings} onSettings={() => setEditing(true)} onDebugStartup={onDebugStartup} />;
+  return <Calendar settings={settings} onSettings={() => setEditing(true)} onDebugStartup={onDebugStartup} onDebugOnboarding={onDebugOnboarding} />;
 }

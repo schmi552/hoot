@@ -24,8 +24,8 @@ function Step({ n, title, children }: { n: number; title: React.ReactNode; child
   );
 }
 
-/** The first-run card. It saves the first settings, the Categories and "Start at login", then calls `onDone`. */
-export function Onboarding({ onDone }: { onDone: () => void }) {
+/** The first-run card. It saves the first settings, the Categories and "Start at login", then calls `onDone`. With `demo`, nothing is saved. */
+export function Onboarding({ onDone, demo }: { onDone: () => void; demo?: boolean }) {
   const [base] = useState(defaults);
   const [workStart, setWorkStart] = useState(base.workStart);
   const [workEnd, setWorkEnd] = useState(base.workEnd);
@@ -53,6 +53,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   };
   // A row that is saved leaves the list, so a retry after a failure does not add it twice.
   const save = async () => {
+    if (demo) return onDone();
     try {
       const today = dateKey(ymdIn(s.tz, Date.now() / 1000));
       await invoke("save_settings", { settings: s, start: today });
