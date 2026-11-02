@@ -22,6 +22,7 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
   const [path, setPath] = useState("");
   const [done, setDone] = useState<{ path: string; count: number } | null>(null);
   const [message, setMessage] = useState("");
+  const [failed, setFailed] = useState(false); // the export failed, so the file may be missing; a failed "Show in folder" is not this
   const fromDay = parseDmy(from);
   const toDay = parseDmy(to);
   const problem = !fromDay || !toDay ? "Write dates as dd.mm.yyyy." : toDay < fromDay ? "The end date must not be before the start date." : "";
@@ -32,6 +33,7 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
     if (!target || !fromDay || !toDay) return;
     setPath(target);
     setMessage("");
+    setFailed(false);
     setDone(null);
     try {
       const [fromUtc] = dayBoundsIn(settings.tz, parseDay(fromDay));
@@ -53,6 +55,7 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
       setDone({ path: target, count: entries.length + meetings.length });
     } catch (e) {
       setMessage(String(e));
+      setFailed(true);
     }
   };
 
@@ -81,8 +84,8 @@ export function ExportDialog({ settings, onClose }: { settings: Settings; onClos
         <span className="wt-hint" style={{ flexBasis: "100%" }}>Two sheets: Entries, and a summary per Category and day.</span>
         <button className="wt-chip" type="button" onClick={onClose}>{done ? "Close" : "Cancel"}</button>
         <button className="wt-chip is-primary" type="submit" disabled={!!problem}>Export .xlsx</button>
-        {message && <button className="wt-chip" type="button" onClick={() => run(path)}>Try again</button>}
-        {message && <button className="wt-chip" type="button" onClick={async () => run(await choose())}>Choose another place</button>}
+        {failed && <button className="wt-chip" type="button" onClick={() => run(path)}>Try again</button>}
+        {failed && <button className="wt-chip" type="button" onClick={async () => run(await choose())}>Choose another place</button>}
         {done && (
           <div className="wt-notice is-success wt-notice-row" role="status" style={{ flexBasis: "100%" }}>
             <span><b>Exported {done.count} {done.count === 1 ? "Entry" : "Entries"}.</b> {done.path.split(/[\\/]/).pop()}</span>

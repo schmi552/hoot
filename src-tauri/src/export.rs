@@ -124,7 +124,7 @@ mod tests {
     use calamine::{open_workbook, Data, Reader, Xlsx};
 
     fn row(date: &str, minutes: u32, category: &str, description: &str) -> Row {
-        Row { date: date.into(), start: "09:00".into(), end: "10:00".into(), minutes, code: format!("P-{category}"), category: category.into(), description: description.into(), absence: false }
+        Row { date: date.into(), start: "09:00".into(), end: "10:00".into(), minutes, code: if category.starts_with("Absence") { String::new() } else { format!("P-{category}") }, category: category.into(), description: description.into(), absence: false }
     }
     fn sample() -> Export {
         Export {
@@ -178,8 +178,8 @@ mod tests {
         let mut book: Xlsx<_> = open_workbook(&path).unwrap();
         let entries = text(&book.worksheet_range("Entries").unwrap());
         assert_eq!(entries.len(), 7);
-        assert_eq!(entries[4], ["28.10.2026", "09:00", "10:00", "", "P-Absence (not worked)", "Absence (not worked)", "Vacation", "Home"]);
-        assert_eq!(entries[5], ["29.10.2026", "", "", "", "P-Absence (not worked)", "Absence (not worked)", "Leave", ""]);
+        assert_eq!(entries[4], ["28.10.2026", "09:00", "10:00", "", "", "Absence (not worked)", "Vacation", "Home"]);
+        assert_eq!(entries[5], ["29.10.2026", "", "", "", "", "Absence (not worked)", "Leave", ""]);
         let days = text(&book.worksheet_range("Hours per day").unwrap());
         assert_eq!(days.len(), 8, "an Absence adds no day and no Category row");
         assert_eq!(days[7], ["28.10.2026", "Home", "", "Total", "1"]);
