@@ -22,9 +22,9 @@ The database is not the cause: 13 weeks of Entries take 0.32 ms on two years of 
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A switch between Week and Month takes less than 60 ms in the Tauri window, with the two frames of the snippet included.
-- [ ] A Month switch does one render, or the extra renders are explained.
-- [ ] No `new Intl.DateTimeFormat` or `toLocale*String` call runs per cell or per event in a render path.
-- [ ] `docs/manual-checks.md` has the timing check.
+- [x] A switch between Week and Month takes less than 60 ms in the Tauri window, with the two frames of the snippet included.
+- [x] A Month switch does one render, or the extra renders are explained.
+- [x] No `new Intl.DateTimeFormat` or `toLocale*String` call runs per cell or per event in a render path.
+- [x] `docs/manual-checks.md` has the timing check.
