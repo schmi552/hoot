@@ -369,6 +369,8 @@
   --bar-height: 6px;
   --badge-height: 22px;
   --empty-text-width: 360px;
+  --empty-blur: 4px;
+  --empty-veil: color-mix(in srgb, var(--calendar-bg) 60%, transparent);
 
   /* ADDED: sizes that components.css used as literals */
   --border-width: 1px;

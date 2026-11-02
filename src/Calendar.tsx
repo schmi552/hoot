@@ -711,9 +711,11 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
       />
       {empty && (
         <div className="wt-empty" aria-live="polite">
-          <Hoot px={5} show={showMascot} />
-          <b className="wt-empty-title">Nothing logged this week</b>
-          <p>Drag in the grid to add an Entry.{next ? ` The next check-in is at ${clock(next)}.` : ""}</p>
+          <div className="wt-empty-panel">
+            <Hoot px={5} show={showMascot} />
+            <b className="wt-empty-title">Nothing logged this week</b>
+            <p>Drag in the grid to add an Entry.{next ? ` The next check-in is at ${clock(next)}.` : ""}</p>
+          </div>
         </div>
       )}
       </div>
