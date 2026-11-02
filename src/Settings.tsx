@@ -3,6 +3,7 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
 import { addMinutes } from "./categoryRows";
 import { ChipGroup, DayPicker, TimeField } from "./fields";
+import { Hoot } from "./Hoot";
 import { Backups, Categories, RecurringMeetings } from "./SettingsData";
 import { Appearance, Theme } from "./theme";
 import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
@@ -188,10 +189,14 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
   return (
     <div className="wt-settings">
       <header className="wt-settings-head">
-        <button type="button" className="wt-icon-btn wt-back" aria-label="Back to calendar" onClick={onBack}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
-        </button>
-        <h1>Settings</h1>
+        <div className="wt-toolbar-group">
+          <Hoot px={3} show={look.showMascot} />
+          <span className="wt-toolbar-name">Hoot</span>
+          <button type="button" className="wt-icon-btn wt-back" aria-label="Back to calendar" onClick={onBack}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
+          </button>
+          <h1 className="wt-toolbar-title">Settings</h1>
+        </div>
       </header>
       <div className="wt-settings-body">
         <nav aria-label="Settings sections" className="wt-settings-nav">
