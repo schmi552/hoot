@@ -70,6 +70,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   const [absenceForm, setAbsenceForm] = useState<AbsenceForm | null>(null);
   const [pickedAbsence, setPickedAbsence] = useState<Absence | null>(null);
   const [menu, setMenu] = useState(false);
+  const [more, setMore] = useState(false); // the "..." menu: Export, Settings, Quit
   const [pickedMeeting, setPickedMeeting] = useState<MeetingOccurrence | null>(null); // a clicked Meeting; Ctrl+C copies it as an Entry
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -239,6 +240,12 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, [menu]);
+  useEffect(() => {
+    if (!more) return;
+    const close = (e: MouseEvent) => (e.target as HTMLElement).closest(".wt-menu-anchor") || setMore(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [more]);
   const showView = (week: boolean) => {
     setMenu(false);
     setPicked(null);
@@ -387,7 +394,6 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             <button className="wt-chip" title="Week (W)" aria-pressed={isWeek} onClick={() => showView(true)}>Week</button>
             <button className="wt-chip" title="Month (M)" aria-pressed={!isWeek} onClick={() => showView(false)}>Month</button>
           </div>
-          <button className="wt-icon-btn" aria-label="Export" title="Export" onClick={() => setExporting(true)}><Download /></button>
           <span className="wt-menu-anchor">
             <button className="wt-plus" aria-label="New" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>+</button>
             {menu && (
@@ -399,7 +405,16 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
               </div>
             )}
           </span>
-          <button className="wt-icon-btn" aria-label="Settings" title={`Settings (${/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)`} onClick={onSettings}><Gear /></button>
+          <span className="wt-menu-anchor">
+            <button className="wt-icon-btn" aria-label="More" aria-haspopup="menu" aria-expanded={more} onClick={() => setMore(!more)}><Dots /></button>
+            {more && (
+              <div className="wt-popmenu wt-plus-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setMore(false)}>
+                <button className="wt-chip" role="menuitem" autoFocus onClick={() => (setMore(false), setExporting(true))}>Export …</button>
+                <button className="wt-chip" role="menuitem" onClick={() => (setMore(false), onSettings())}>Settings ({/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"}+,)</button>
+                <button className="wt-chip" role="menuitem" onClick={() => invoke("quit")}>Quit Work Tracker</button>
+              </div>
+            )}
+          </span>
         </div>
       </header>
       {import.meta.env.DEV && (
@@ -786,19 +801,13 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
   );
 }
 
-function Download() {
+function Dots() {
   return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
     </svg>
   );
 }
 
-function Gear() {
-  return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-    </svg>
-  );
-}

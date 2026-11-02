@@ -61,6 +61,7 @@ const handlers: Record<string, (a: any) => any> = {
   show_backups_folder: () => {},
   show_in_folder: () => {},
   export_xlsx: () => {},
+  quit: () => {},
   set_popup_visible: () => {},
   report_save_failure: () => {},
 };
