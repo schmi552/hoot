@@ -442,6 +442,7 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-overlaps { color: var(--color-danger) !important; font-weight: 600; }
 .wt-calendar .wt-drag-source { visibility: visible; opacity: 0.4; }
 .wt-empty { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-sm); pointer-events: none; text-align: center; backdrop-filter: blur(var(--empty-blur)); background: var(--empty-veil); }
+.wt-empty .wt-chip { pointer-events: auto; } /* the veil lets the grid get drags, but the button takes clicks */
 .wt-empty p { max-width: var(--empty-text-width); margin: 0; color: var(--color-text-muted); }
 .wt-empty-title { font: var(--text-title) var(--font-display); }
 
@@ -547,4 +548,17 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 
 /* A modal question: the form sits in the middle over a dimmed page. */
 .wt-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgb(0 0 0 / 0.4); }
-.wt-modal > form { margin: 0; padding: var(--space-md); background: var(--listbox-bg); border: var(--border-width) solid var(--listbox-border); border-radius: var(--listbox-radius); box-shadow: var(--listbox-shadow); }
+.wt-modal > form:not(.wt-dialog) { margin: 0; padding: var(--space-md); background: var(--listbox-bg); border: var(--border-width) solid var(--listbox-border); border-radius: var(--listbox-radius); box-shadow: var(--listbox-shadow); }
+
+/* A modal form: a header, a body of labelled fields and a footer with the buttons. */
+.wt-dialog { box-sizing: border-box; width: min(440px, calc(100vw - 2 * var(--space-md))); max-height: calc(100vh - 2 * var(--space-md)); display: flex; flex-direction: column; margin: 0; background: var(--listbox-bg); border: var(--border-width) solid var(--listbox-border); border-radius: var(--listbox-radius); box-shadow: var(--listbox-shadow); }
+.wt-dialog-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm); padding: var(--space-md); border-bottom: var(--border-width) solid var(--color-border); font-weight: 600; }
+.wt-dialog-body { display: grid; gap: var(--space-md); padding: var(--space-md); overflow-y: auto; }
+.wt-dialog-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+.wt-dialog-foot { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-top: var(--border-width) solid var(--color-border); }
+.wt-dialog .wt-error:empty { display: none; }
+.wt-dialog .wt-check { display: flex; align-items: center; gap: var(--space-sm); }
+
+/* A native select draws its own height on macOS. This one has the height of every other input. */
+select.wt-input { appearance: none; padding-right: calc(var(--space-sm) * 3); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23888' stroke-width='1.5'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right var(--space-sm) center; }
+.wt-days { display: flex; flex-wrap: wrap; gap: var(--space-xs); }

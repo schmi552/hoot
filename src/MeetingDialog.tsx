@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { Temporal } from "temporal-polyfill";
-import { MeetingOccurrence, MeetingSeries, Repeat, repeatText, REPEATS, ruleFor } from "./schedule/meetings";
+import { MeetingOccurrence, MeetingSeries, Repeat, repeatText, REPEATS, ruleFor, WEEKDAYS } from "./schedule/meetings";
 import { Category, CategoryCombo } from "./CategoryCombo";
+import { Field, FormDialog } from "./FormDialog";
 import { ErrorLine } from "./Popup";
 import type { Settings } from "./Settings";
 
-export type MeetingForm = { title: string; categoryId: number; source: string; start: string; duration: number; repeat: Repeat; editing?: MeetingOccurrence };
+export type MeetingForm = { title: string; categoryId: number; source: string; start: string; duration: number; repeat: Repeat; days?: string[]; editing?: MeetingOccurrence };
 /** What the dialog does: show a form (new or edit), or ask about a delete. */
 export type MeetingAsk = { form: MeetingForm } | { remove: MeetingOccurrence };
 /** What the scope dialog is asking about: the changed form of a Meeting, or a delete. */
@@ -22,8 +23,10 @@ export const localInput = (tz: string, sec: number) => {
  * The Meeting form and the "This Meeting only / All Meetings" question. The calendar and Settings both use it.
  * With `wholeSeries` every change and delete is for the series, so the scope question is skipped and the form has a "Delete series" button.
  */
-export function MeetingDialog({ settings, categories, series, ask, wholeSeries, onClose, onDone }: {
+export function MeetingDialog({ settings, categories, series, ask, wholeSeries, onClose, onDone, onAbsence }: {
   settings: Settings; categories: Category[]; series: MeetingSeries[]; ask: MeetingAsk; wholeSeries?: boolean; onClose: () => void; onDone: () => void;
+  /** Given for a new Meeting: the header then offers a switch to the Absence form. */
+  onAbsence?: () => void;
 }) {
   const [form, setForm] = useState<MeetingForm | null>("form" in ask ? ask.form : null);
   const [scope, setScope] = useState<Scope | null>(null);
@@ -46,8 +49,9 @@ export function MeetingDialog({ settings, categories, series, ask, wholeSeries, 
   const save = () => {
     const f = form!;
     if (!f.title.trim() || !f.start || f.duration < 1) return setError("Give the Meeting a title, a start and a length."), setFailed(false);
+    if (f.repeat === "custom" && !f.days?.length) return setError("Pick at least one day for the repeat."), setFailed(false);
     if (f.editing) return askScope({ occurrence: f.editing, form: f });
-    write(invoke("create_meeting", { meeting: { id: 0, categoryId: f.categoryId || null, title: f.title.trim(), startLocal: f.start, durationMinutes: f.duration, tz: settings.tz, rrule: ruleFor(f.repeat), sourceFile: null } }));
+    write(invoke("create_meeting", { meeting: { id: 0, categoryId: f.categoryId || null, title: f.title.trim(), startLocal: f.start, durationMinutes: f.duration, tz: settings.tz, rrule: ruleFor(f.repeat, f.days), sourceFile: null } }));
   };
   useEffect(() => {
     if ("remove" in ask) askScope({ occurrence: ask.remove });
@@ -82,31 +86,49 @@ export function MeetingDialog({ settings, categories, series, ask, wholeSeries, 
     );
   }
   if (!form) return null;
+  /** "On certain weekdays" starts with the weekday of the start, so the first Meeting is one of the days. */
+  const pickRepeat = (repeat: Repeat) => setForm({ ...form, repeat, days: form.days?.length ? form.days : [WEEKDAYS[Temporal.PlainDateTime.from(form.start || localInput(settings.tz, Date.now() / 1000)).dayOfWeek - 1]] });
   const rule = form.editing && series.find((x) => x.id === form.editing!.seriesId)?.rrule;
   return (
-    <form
-      className="wt-form wt-editor"
-      onKeyDown={(e) => e.key === "Escape" && onClose()}
-      onSubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
+    <FormDialog
+      title={form.editing ? "Edit Meeting" : onAbsence ? "New Event" : "New Meeting"}
+      kind={onAbsence && !form.editing ? "Meeting" : undefined}
+      onKind={onAbsence}
+      onClose={onClose}
+      onSubmit={save}
+      error={error}
+      retry={failed ? save : undefined}
+      extra={wholeSeries && form.editing && <button className="wt-chip" type="button" onClick={() => change({ occurrence: form.editing! }, false)}>Delete series</button>}
     >
-      <input className="wt-input" aria-label="Title" placeholder="Title" autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-      <div style={{ flex: "1 1 160px" }}><CategoryCombo none options={categories} value={form.categoryId} onChange={(categoryId) => setForm({ ...form, categoryId })} /></div>
+      <Field label="Title"><input className="wt-input" autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
+      <div className="wt-field"><span className="wt-label">Category</span><CategoryCombo none down options={categories} value={form.categoryId} onChange={(categoryId) => setForm({ ...form, categoryId })} /></div>
       {form.source && <p className="wt-sub">{form.source}</p>}
       {rule && <p className="wt-sub">{repeatText(rule)}</p>}
-      <label className="wt-inline-field wt-sub">Start <input className="wt-input" type="datetime-local" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></label>
-      <label className="wt-inline-field wt-sub">Length <input className="wt-input" type="number" min={5} step={5} value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} /> min</label>
+      <div className="wt-dialog-row">
+        <Field label="Start"><input className="wt-input" type="datetime-local" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></Field>
+        <Field label="Length (min)"><input className="wt-input" type="number" min={5} step={5} value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} /></Field>
+      </div>
       {!form.editing && (
-        <select className="wt-input" aria-label="Repeat" value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value as Repeat })}>
-          {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r[0].toUpperCase() + r.slice(1)}</option>)}
-        </select>
+        <>
+          <Field label="Repeat">
+            <select className="wt-input" value={form.repeat} onChange={(e) => pickRepeat(e.target.value as Repeat)}>
+              {REPEATS.map((r) => <option key={r} value={r}>{r === "none" ? "Does not repeat" : r === "custom" ? "On certain weekdays" : r[0].toUpperCase() + r.slice(1)}</option>)}
+            </select>
+          </Field>
+          {form.repeat === "custom" && (
+            <div className="wt-field">
+              <span className="wt-label">Every week on</span>
+              <div role="group" aria-label="Days" className="wt-days">
+                {WEEKDAYS.map((d, i) => (
+                  <button key={d} type="button" className="wt-chip" aria-pressed={!!form.days?.includes(d)} onClick={() => setForm({ ...form, days: form.days?.includes(d) ? form.days.filter((x) => x !== d) : [...(form.days ?? []), d] })}>
+                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
-      <button className="wt-chip" type="button" onClick={onClose}>Cancel</button>
-      <button className="wt-chip is-primary" type="submit">Save</button>
-      {wholeSeries && form.editing && <button className="wt-chip" type="button" onClick={() => change({ occurrence: form.editing! }, false)}>Delete series</button>}
-      <ErrorLine error={error} retry={failed ? save : undefined} />
-    </form>
+    </FormDialog>
   );
 }

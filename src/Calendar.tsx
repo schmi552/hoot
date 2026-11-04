@@ -21,6 +21,7 @@ import { monthTitle, toolbarKey, weekTitle } from "./schedule/toolbar";
 import { CategoryCombo } from "./CategoryCombo";
 import { ExportDialog } from "./Export";
 import { ImportDialog, PickCategoryDialog } from "./Import";
+import { Field, FormDialog } from "./FormDialog";
 import { localInput, MeetingAsk, MeetingDialog } from "./MeetingDialog";
 import { Hoot } from "./Hoot";
 import { ErrorLine } from "./Popup";
@@ -33,6 +34,7 @@ type Slot = { start: Date; end: Date };
 type Change = { from: Entry | null; to: Entry | null };
 
 const DEFAULT_MINUTES = 60;
+const NEW_ENTRY_MINUTES = 30; // a new Entry from the button starts now
 const SLOT_MINUTES = 30;
 // FullCalendar compares its options by identity, so options that do not change must be the same object each render.
 const SLOT_DURATION = { minutes: SLOT_MINUTES };
@@ -41,7 +43,7 @@ const VIEWS = { dayGridMonth: { editable: false } }; // the month view only show
 const DAY = 86_400; // shortcut: a day step is 24 hours, so it is an hour off across a DST change; upgrade with instantAt if that matters
 const secs = (d: Date) => d.getTime() / 1000;
 /** The Absence dialog. A full-day Absence uses `from` and `to` as dates; a part-day Absence uses them as "YYYY-MM-DDTHH:MM". */
-type AbsenceForm = { kind: AbsenceKind; label: string; allDay: boolean; from: string; to: string };
+type AbsenceForm = { id?: number; kind: AbsenceKind; label: string; allDay: boolean; from: string; to: string };
 
 /** The week view. A drag on the grid, or `N`, opens the editor for a new Entry. */
 /** The nearest ancestor that scrolls up and down. */
@@ -62,6 +64,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
   const [picked, setPicked] = useState<Date | null>(null); // a clicked slot, shaded until `N` or a drag uses it
   const [categoryId, setCategoryId] = useState(0);
   const [description, setDescription] = useState("");
+  const [times, setTimes] = useState({ start: "", end: "" }); // local date-times in the zone of the Entry (the settings for a new one)
   const [error, setError] = useState("");
   const [failed, setFailed] = useState(false); // the last editor write failed, so the error line offers a retry
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -144,32 +147,56 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     return () => clearTimeout(t);
   }, [notice]);
 
+  // Only one of the Entry form, the Meeting form and the Absence form is open at a time.
   const open = (s: Slot, entry: Entry | null = null) => {
     setMenu(false);
+    setMeeting(null);
+    setAbsenceForm(null);
     setSlot(s);
     setEditing(entry);
     setPicked(null);
     setCategoryId(entry?.categoryId ?? categories[0]?.id ?? 0);
     setDescription(entry?.description ?? "");
+    setTimes({ start: localInput(entry?.tz ?? settings.tz, secs(s.start)), end: localInput(entry?.tz ?? settings.tz, secs(s.end)) });
     setError(categories.length ? "" : "Add a Category in Settings first.");
     setFailed(false);
   };
+  const closeEntryForm = () => {
+    setSlot(null);
+    setEditing(null);
+    calendar.current?.getApi().unselect();
+  };
   const openMeeting = () => {
     setMenu(false);
+    closeEntryForm();
+    setAbsenceForm(null);
     setPicked(null);
     const start = picked ? secs(picked) : defaultStart();
     setMeeting({ form: { title: "", categoryId: categories[0]?.id ?? 0, source: "", start: localInput(settings.tz, start), duration: DEFAULT_MINUTES, repeat: "none" } });
   };
   const editMeeting = (m: MeetingOccurrence) => {
     setMenu(false);
+    closeEntryForm();
+    setAbsenceForm(null);
     setPicked(null);
     setMeeting({ form: { title: m.title, categoryId: m.categoryId ?? 0, source: sourceText(series.find((x) => x.id === m.seriesId) ?? { sourceFile: null }), start: localInput(settings.tz, m.startUtc), duration: (m.endUtc - m.startUtc) / 60, repeat: "none", editing: m } });
   };
   const openAbsence = (from?: string, to?: string) => {
     setMenu(false);
+    closeEntryForm();
+    setMeeting(null);
     setPicked(null);
     const day = dateKey(ymdIn(settings.tz, Date.now() / 1000));
     setAbsenceForm({ kind: "Vacation", label: "", allDay: true, from: from ?? day, to: to ?? from ?? day });
+    setError("");
+    setFailed(false);
+  };
+  const editAbsence = (a: Absence) => {
+    setMenu(false);
+    closeEntryForm();
+    setMeeting(null);
+    const local = (sec: number) => localInput(a.tz ?? settings.tz, sec);
+    setAbsenceForm(a.startDate ? { id: a.id, kind: a.kind, label: a.label, allDay: true, from: a.startDate, to: a.endDate! } : { id: a.id, kind: a.kind, label: a.label, allDay: false, from: local(a.startUtc!), to: local(a.endUtc!) });
     setError("");
     setFailed(false);
   };
@@ -178,18 +205,14 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     const empty = { startDate: null, endDate: null, startUtc: null, endUtc: null, tz: null };
     const instant = (local: string) => Temporal.ZonedDateTime.from(`${local}:00[${settings.tz}]`).epochMilliseconds / 1000;
     if (!f.from || !f.to || f.to < f.from || (!f.allDay && f.to <= f.from)) return setError("Give the Absence a range that ends after it starts."), setFailed(false);
-    const absence = { id: 0, kind: f.kind, label: f.label.trim(), ...empty, ...(f.allDay ? { startDate: f.from, endDate: f.to } : { startUtc: instant(f.from), endUtc: instant(f.to), tz: settings.tz }) };
-    invoke("create_absence", { absence }).then(
+    const absence = { id: f.id ?? 0, kind: f.kind, label: f.label.trim(), ...empty, ...(f.allDay ? { startDate: f.from, endDate: f.to } : { startUtc: instant(f.from), endUtc: instant(f.to), tz: settings.tz }) };
+    invoke(f.id ? "update_absence" : "create_absence", { absence }).then(
       () => (setAbsenceForm(null), load()),
       (e) => (setError(String(e)), setFailed(true)),
     );
   };
   const deleteAbsence = (a: Absence) => invoke("delete_absence", { id: a.id }).then(() => (setPickedAbsence(null), load()), fail);
-  const close = () => {
-    setSlot(null);
-    setEditing(null);
-    calendar.current?.getApi().unselect();
-  };
+  const close = closeEntryForm;
 
   const apply = ({ from, to }: Change): Promise<Entry | null> =>
     to
@@ -233,7 +256,9 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
 
   const save = () => {
     if (!slot) return;
-    const entry = { ...(editing ?? { id: 0, startUtc: secs(slot.start), endUtc: secs(slot.end), tz: settings.tz }), categoryId, description: description.trim() };
+    const [startUtc, endUtc] = [times.start, times.end].map((t) => (t ? Temporal.ZonedDateTime.from(`${t}:00[${editing?.tz ?? settings.tz}]`).epochMilliseconds / 1000 : NaN));
+    if (!(endUtc > startUtc)) return setError("Give the Entry an end time after its start time."), setFailed(false);
+    const entry = { ...(editing ?? { id: 0, tz: settings.tz }), startUtc, endUtc, categoryId, description: description.trim() };
     commit(editing, entry).then(close, (e) => (setError(String(e)), setFailed(true)));
   };
 
@@ -244,6 +269,12 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     const day = ymdIn(settings.tz, range && (nowSec < range[0] || nowSec >= range[1]) ? range[0] : nowSec);
     const [from, to] = dayBoundsIn(settings.tz, day);
     return nextFreeStart(entries, from, to, instantAt(settings.tz, day, parseHM(settings.workStart)));
+  };
+  /** The slot of a new Entry: the picked slot, else now for half an hour. */
+  const newSlot = (): Slot => {
+    if (picked) return { start: picked, end: new Date(picked.getTime() + DEFAULT_MINUTES * 60_000) };
+    const start = Math.floor(Date.now() / 60_000) * 60_000;
+    return { start: new Date(start), end: new Date(start + NEW_ENTRY_MINUTES * 60_000) };
   };
   const edit = (e: Entry) => open({ start: new Date(e.startUtc * 1000), end: new Date(e.endUtc * 1000) }, e);
 
@@ -295,10 +326,10 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
     }
     if (pickedMeeting && !mod && (k === "delete" || k === "backspace")) return keep(), setMeeting({ remove: pickedMeeting });
     if (pickedMeeting && k === "enter") return keep(), editMeeting(pickedMeeting);
+    if (pickedAbsence && k === "enter") return keep(), editAbsence(pickedAbsence);
     if (k === "n" && !mod) {
       keep();
-      const start = picked ? secs(picked) : defaultStart();
-      return open({ start: new Date(start * 1000), end: new Date((start + DEFAULT_MINUTES * 60) * 1000) });
+      return open(newSlot());
     }
     if (mod && k === "z") return keep(), travel(e.shiftKey ? 1 : -1);
     if (mod && k === "v" && clipboard.current) {
@@ -439,6 +470,8 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         const id = (e.target as HTMLElement).closest<HTMLElement>("[data-id]")?.dataset.id;
         const entry = entries.find((x) => x.id === Number(id));
         if (entry) edit(entry);
+        const absence = id?.startsWith("a") ? absences.find((x) => `a${x.id}` === id) : undefined;
+        if (absence) editAbsence(absence);
       }}
     >
       <header className="wt-toolbar">
@@ -465,11 +498,10 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           <span className="wt-menu-anchor">
             <button className="wt-chip is-primary" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>+ New</button>
             {menu && (
-              <div className="wt-popmenu wt-plus-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setMenu(false)}>
-                <button className="wt-chip" role="menuitem" autoFocus onClick={() => (setMenu(false), open({ start: new Date(defaultStart() * 1000), end: new Date((defaultStart() + DEFAULT_MINUTES * 60) * 1000) }))}>Entry (N)</button>
-                <button className="wt-chip" role="menuitem" onClick={openMeeting}>Meeting (M)</button>
-                <button className="wt-chip" role="menuitem" onClick={() => openAbsence()}>Absence (A)</button>
-                <button className="wt-chip" role="menuitem" onClick={openImport}>Import .ics … (I)</button>
+              <div className="wt-popmenu wt-plus-menu wt-menulist" role="menu" onKeyDown={(e) => e.key === "Escape" && setMenu(false)}>
+                <button className="wt-menuitem" role="menuitem" autoFocus onClick={() => (setMenu(false), open(newSlot()))}>Entry (N)</button>
+                <button className="wt-menuitem" role="menuitem" onClick={openMeeting}>Meeting / Absence (M)</button>
+                <button className="wt-menuitem" role="menuitem" onClick={openImport}>Import .ics … (I)</button>
               </div>
             )}
           </span>
@@ -526,11 +558,12 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
             save();
           }}
         >
-          <span className="wt-sub">
-            {slot.start.toLocaleString("en-GB", { timeZone: settings.tz, weekday: "short", hour: "2-digit", minute: "2-digit" })} to{" "}
-            {slot.end.toLocaleTimeString("en-GB", { timeZone: settings.tz, hour: "2-digit", minute: "2-digit" })}
+          <span className="wt-inline-field wt-sub">
+            <input className="wt-input" type="datetime-local" aria-label="Start" required value={times.start} onChange={(e) => setTimes({ ...times, start: e.target.value })} />
+            to
+            <input className="wt-input" type="datetime-local" aria-label="End" required value={times.end} onChange={(e) => setTimes({ ...times, end: e.target.value })} />
           </span>
-          <div style={{ flex: "1 1 160px" }}><CategoryCombo options={categories} value={categoryId} onChange={setCategoryId} /></div>
+          <div style={{ flex: "1 1 160px" }}><CategoryCombo down options={categories} value={categoryId} onChange={setCategoryId} /></div>
           <input className="wt-input" aria-label="Description" autoFocus value={description} onChange={(e) => setDescription(e.target.value)} />
           <button className="wt-chip" type="button" onClick={close}>Cancel</button>
           <button className="wt-chip is-primary" type="submit" disabled={!categoryId}>Save</button>
@@ -545,30 +578,27 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           ask={meeting}
           onClose={() => setMeeting(null)}
           onDone={() => (setMeeting(null), setPickedMeeting(null), load())}
+          onAbsence={() => openAbsence()}
         />
       )}
       {absenceForm && (
-        <form
-          className="wt-form wt-editor"
-          onKeyDown={(e) => e.key === "Escape" && setAbsenceForm(null)}
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveAbsence();
-          }}
-        >
-          <select className="wt-input" aria-label="Type" value={absenceForm.kind} onChange={(e) => setAbsenceForm({ ...absenceForm, kind: e.target.value as AbsenceKind })}>
-            {ABSENCE_KINDS.map((k) => <option key={k}>{k}</option>)}
-          </select>
-          <input className="wt-input" aria-label="Label" placeholder="Label (optional)" autoFocus value={absenceForm.label} onChange={(e) => setAbsenceForm({ ...absenceForm, label: e.target.value })} />
-          <label className="wt-inline-field wt-sub">
+        <FormDialog title={absenceForm.id ? "Edit Absence" : "New Event"} kind={absenceForm.id ? undefined : "Absence"} onKind={openMeeting} onClose={() => setAbsenceForm(null)} onSubmit={saveAbsence} error={error} retry={failed ? saveAbsence : undefined}>
+          <div className="wt-dialog-row">
+            <Field label="Type">
+              <select className="wt-input" value={absenceForm.kind} onChange={(e) => setAbsenceForm({ ...absenceForm, kind: e.target.value as AbsenceKind })}>
+                {ABSENCE_KINDS.map((k) => <option key={k}>{k}</option>)}
+              </select>
+            </Field>
+            <Field label="Label"><input className="wt-input" placeholder="Optional" autoFocus value={absenceForm.label} onChange={(e) => setAbsenceForm({ ...absenceForm, label: e.target.value })} /></Field>
+          </div>
+          <label className="wt-check">
             <input type="checkbox" checked={absenceForm.allDay} onChange={(e) => setAbsenceForm({ ...absenceForm, allDay: e.target.checked, from: absenceForm.from.slice(0, 10) + (e.target.checked ? "" : "T" + settings.workStart), to: absenceForm.to.slice(0, 10) + (e.target.checked ? "" : "T" + settings.workEnd) })} /> All day
           </label>
-          <label className="wt-inline-field wt-sub">From <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} /></label>
-          <label className="wt-inline-field wt-sub">To <input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} /></label>
-          <button className="wt-chip" type="button" onClick={() => setAbsenceForm(null)}>Cancel</button>
-          <button className="wt-chip is-primary" type="submit">Save</button>
-          <ErrorLine error={error} retry={failed ? saveAbsence : undefined} />
-        </form>
+          <div className="wt-dialog-row">
+            <Field label="From"><input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} value={absenceForm.from} onChange={(e) => setAbsenceForm({ ...absenceForm, from: e.target.value })} /></Field>
+            <Field label="To"><input className="wt-input" type={absenceForm.allDay ? "date" : "datetime-local"} value={absenceForm.to} onChange={(e) => setAbsenceForm({ ...absenceForm, to: e.target.value })} /></Field>
+          </div>
+        </FormDialog>
       )}
       {!isWeek && (
         <div className="wt-legend">
@@ -599,6 +629,7 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         snapDuration="00:15:00"
         selectable
         selectMirror
+        unselectAuto={false} // the outline stays while the Entry form is open. `close` unselects it
         selectOverlap={(ev) => !!ev.extendedProps.meeting || !!ev.extendedProps.absence} // a Meeting or an Absence never blocks an Entry
         editable
         views={VIEWS}
@@ -732,7 +763,8 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
         <div className="wt-empty" aria-live="polite">
           <Hoot px={5} show={showMascot} />
           <b className="wt-empty-title">Nothing logged this week</b>
-          <p>Drag in the grid to add an Entry.{next ? ` The next check-in is at ${clock(next)}.` : ""}</p>
+          {next && <p>The next check-in is at {clock(next)}.</p>}
+          <button className="wt-chip is-primary" onClick={() => open(newSlot())}>Add Entry</button>
         </div>
       )}
       </div>
@@ -784,8 +816,8 @@ export function Calendar({ settings, onSettings, onDebugStartup, onDebugOnboardi
           {pickedAbsence && (
             <div className="wt-side-keys">
               <b>Selected Absence</b>
-              <span><kbd className="wt-kbd">Del</kbd>delete</span>
-              <span className="wt-menu"><button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button></span>
+              <span><kbd className="wt-kbd">Enter</kbd>edit · <kbd className="wt-kbd">Del</kbd>delete</span>
+              <span className="wt-menu"><button className="wt-chip" onClick={() => editAbsence(pickedAbsence)}>Edit Absence</button><button className="wt-chip" onClick={() => deleteAbsence(pickedAbsence)}>Delete Absence</button></span>
             </div>
           )}
         </aside>
