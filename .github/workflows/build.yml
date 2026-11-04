@@ -1,0 +1,56 @@
+name: Build
+
+# Every push to main builds the installers for macOS (Apple Silicon) and Windows.
+# They go into one release called "latest", which each build replaces. The release page is the download page.
+# The builds are not signed. See the README for the first-run warnings.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# A newer push replaces a running build, so two builds never fight over the "latest" tag.
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move the latest tag to this commit
+        run: |
+          git tag -f latest
+          git push -f origin latest
+
+  build:
+    needs: tag
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: latest
+          releaseName: Hoot (latest build)
+          releaseBody: The newest build of the main branch. These installers are not signed, so macOS and Windows show a warning the first time you open them. See the README.
+          releaseDraft: false
+          prerelease: true
