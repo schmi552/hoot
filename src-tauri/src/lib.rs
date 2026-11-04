@@ -81,6 +81,11 @@ fn set_show_mascot(db: State<Db>, show: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_play_sound(db: State<Db>, play: bool) -> Result<(), String> {
+    store::set_play_sound(&db.0.lock().unwrap(), play).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn create_entry(db: State<Db>, entry: store::Entry) -> Result<store::Entry, String> {
     store::create_entry(&db.0.lock().unwrap(), &entry)
 }
@@ -371,6 +376,7 @@ pub fn run() {
             get_appearance,
             set_theme,
             set_show_mascot,
+            set_play_sound,
             create_entry,
             update_entry,
             delete_entry,

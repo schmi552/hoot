@@ -5,6 +5,7 @@ import { addMinutes } from "./categoryRows";
 import { DayPicker, MinutesField, TimeField, TimeSpanField } from "./fields";
 import { Hoot } from "./Hoot";
 import { Backups, Categories, RecurringMeetings } from "./SettingsData";
+import { playHoot } from "./hootSound";
 import { Appearance, Theme } from "./theme";
 import { dateKey, expectedMinutes, instantAt, weekday, ymdIn } from "./schedule/schedule";
 
@@ -163,7 +164,7 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
   const [categories, setCategories] = useState<Category[]>([]);
   const [message, setMessage] = useState("");
   const [autostart, setAutostart] = useState(false);
-  const [look, setLook] = useState<Appearance>({ theme: "light", showMascot: true });
+  const [look, setLook] = useState<Appearance>({ theme: "light", showMascot: true, playSound: true });
   const [active, setActive] = useState<string>(SECTIONS[0][0]); // the menu item of the section in view
   const picked = useRef(false); // a click on the menu holds its item until the user scrolls by hand
   useEffect(() => {
@@ -192,6 +193,7 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
   const fail = (e: unknown) => setMessage(String(e));
   const toggleAutostart = (on: boolean) => (on ? enable() : disable()).then(() => setAutostart(on), fail);
   const setTheme = (theme: Theme) => invoke("set_theme", { theme }).then(() => setLook({ ...look, theme }), fail);
+  const setPlaySound = (playSound: boolean) => invoke("set_play_sound", { play: playSound }).then(() => (setLook({ ...look, playSound }), playSound && playHoot()), fail); // the hoot plays once, so the user hears what is on
   const setShowMascot = (showMascot: boolean) => invoke("set_show_mascot", { show: showMascot }).then(() => setLook({ ...look, showMascot }), fail);
 
   return (
@@ -238,6 +240,10 @@ export function SettingsForm({ saved, onSaved, onBack }: { saved: Settings; onSa
             <label className="wt-check">
               <input type="checkbox" checked={look.showMascot} onChange={(e) => setShowMascot(e.target.checked)} />
               Show the mascot
+            </label>
+            <label className="wt-check">
+              <input type="checkbox" checked={look.playSound} onChange={(e) => setPlaySound(e.target.checked)} />
+              Play a hoot when Hoot asks
             </label>
             {message && <p className="wt-error" role="alert">{message}</p>}
           </section>

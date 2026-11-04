@@ -569,6 +569,7 @@ pub fn list_workday_locations(conn: &Connection, from: &str, to: &str) -> Result
 pub struct Appearance {
     pub theme: String,
     pub show_mascot: bool,
+    pub play_sound: bool,
 }
 
 fn app_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
@@ -579,11 +580,12 @@ fn set_app_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
     conn.execute("INSERT OR REPLACE INTO app_setting (key, value) VALUES (?1, ?2)", [key, value]).map(drop)
 }
 
-/// The theme is "light" and the mascot is on until the user changes them.
+/// The theme is "light", and the mascot and the sound are on until the user changes them.
 pub fn appearance(conn: &Connection) -> Result<Appearance> {
     Ok(Appearance {
         theme: app_setting(conn, "theme")?.unwrap_or_else(|| "light".into()),
         show_mascot: app_setting(conn, "show_mascot")?.is_none_or(|v| v == "true"),
+        play_sound: app_setting(conn, "play_sound")?.is_none_or(|v| v == "true"),
     })
 }
 
@@ -596,6 +598,10 @@ pub fn set_theme(conn: &Connection, theme: &str) -> std::result::Result<(), Stri
 
 pub fn set_show_mascot(conn: &Connection, show: bool) -> Result<()> {
     set_app_setting(conn, "show_mascot", &show.to_string())
+}
+
+pub fn set_play_sound(conn: &Connection, play: bool) -> Result<()> {
+    set_app_setting(conn, "play_sound", &play.to_string())
 }
 
 #[cfg(test)]
@@ -623,14 +629,15 @@ mod tests {
     }
 
     #[test]
-    fn appearance_defaults_to_light_theme_with_mascot_and_reads_back_changes() {
+    fn appearance_defaults_to_light_theme_with_mascot_and_sound_and_reads_back_changes() {
         let dir = tempfile::tempdir().unwrap();
         let conn = crate::safety::open_safely(dir.path()).unwrap();
-        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "light".into(), show_mascot: true });
+        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "light".into(), show_mascot: true, play_sound: true });
 
         set_theme(&conn, "dark").unwrap();
         set_show_mascot(&conn, false).unwrap();
-        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "dark".into(), show_mascot: false });
+        set_play_sound(&conn, false).unwrap();
+        assert_eq!(appearance(&conn).unwrap(), Appearance { theme: "dark".into(), show_mascot: false, play_sound: false });
 
         set_show_mascot(&conn, true).unwrap();
         assert!(appearance(&conn).unwrap().show_mascot);

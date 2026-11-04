@@ -7,6 +7,7 @@ import { expandMeetings, MeetingException, MeetingSeries } from "./schedule/meet
 import { CategoryCombo } from "./CategoryCombo";
 import { Hoot, Mood } from "./Hoot";
 import type { Settings } from "./Settings";
+import { playHoot } from "./hootSound";
 import type { Appearance } from "./theme";
 
 type Entry = Span & { id: number; categoryId: number; description: string; tz: string };
@@ -58,7 +59,9 @@ export function Popup() {
       const today = dateKey(ymdIn(settings.tz, nowUtc));
       const askLocation = !(await invoke<unknown[]>("list_workday_locations", { from: today, to: today })).length; // the first popup of the day
       const previous = entries.filter((e) => e.endUtc <= spans[0].startUtc).sort((a, b) => b.endUtc - a.endUtc)[0] ?? null;
-      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation, gap: !!gapSpans, previous, showMascot: (await invoke<Appearance>("get_appearance")).showMascot });
+      const look = await invoke<Appearance>("get_appearance");
+      show({ now: nowUtc, settings, spans, last, recents: recentEntries(entries), categories, today, askLocation, gap: !!gapSpans, previous, showMascot: look.showMascot });
+      if (look.playSound) playHoot();
     };
     const unlisten = listen<{ nowUtc: number }>("tick", ({ payload }) => check(payload.nowUtc));
     const debug = listen("debug-popup", () => check(Math.floor(Date.now() / 1000), true));

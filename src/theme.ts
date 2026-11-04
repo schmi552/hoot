@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 export type Theme = "system" | "light" | "dark";
-export type Appearance = { theme: Theme; showMascot: boolean };
+export type Appearance = { theme: Theme; showMascot: boolean; playSound: boolean };
 
 /** "system" removes the attribute, so the tokens follow the system setting. */
 export const applyTheme = (theme: Theme) =>

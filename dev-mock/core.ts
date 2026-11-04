@@ -8,7 +8,7 @@ const q = new URLSearchParams(location.search);
 let settings: any = q.has("empty")
   ? null
   : { workStart: "07:00", workEnd: "16:00", lunchStart: "12:00", lunchEnd: "12:30", tz, intervalMinutes: 30, workdays: "12345" };
-let appearance = { theme: q.get("theme") ?? "system", showMascot: true };
+let appearance = { theme: q.get("theme") ?? "system", showMascot: true, playSound: true };
 const categories = [
   { id: 1, code: "DEV", name: "Development", color: 1 },
   { id: 2, code: "MTG", name: "Meetings", color: 2 },
@@ -35,6 +35,7 @@ const handlers: Record<string, (a: any) => any> = {
   list_settings_history: () => (settings ? [{ ...settings, effectiveFrom: "2026-01-01" }] : []),
   get_appearance: () => appearance,
   set_theme: (a) => { appearance = { ...appearance, theme: a.theme }; emitLocal("theme-changed", a.theme); },
+  set_play_sound: (a) => void (appearance = { ...appearance, playSound: a.play }),
   set_show_mascot: (a) => void (appearance = { ...appearance, showMascot: a.show }),
   list_categories: () => categories,
   used_categories: () => [1, 2, 3],

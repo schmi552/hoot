@@ -27,7 +27,7 @@ If you miss a check-in, Hoot notices the gap the next time and asks you to fill 
 
 ## Features
 
-- **Check-in window.** Always on top, closes when you answer. Recent answers are one click, and "Yes, still" repeats the last entry.
+- **Check-in window.** Always on top, closes when you answer. Recent answers are one click, and "Yes, still" repeats the last entry. A soft hoot plays when it opens. You can turn it off in Settings.
 - **Week and month calendar.** Drag to add an Entry, drag an edge to resize, move Entries with the arrow keys. Undo and redo work. You see hours per day and per week, and a bar with the share of each Category.
 - **Categories.** A code (for example a PSP number), a name and one of eight colors. A Category that has Entries is archived instead of deleted.
 - **Recurring Meetings.** Add them by hand or import an `.ics` file. You can change one day or the whole series.
