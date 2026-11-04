@@ -264,6 +264,11 @@ html, body { margin: 0; background: var(--color-surface); color: var(--color-tex
 .wt-section .wt-field, .wt-ob .wt-field { display: flex; flex-direction: column; align-items: stretch; gap: 6px; } /* wins over the Meeting dialog's .wt-field */
 .wt-settings .wt-error:empty { display: none; }
 .wt-time { box-sizing: border-box; width: var(--time-field-width); font-family: var(--font-mono); }
+.wt-combo-down ul { top: 100%; bottom: auto; margin: var(--listbox-gap) 0 0; }
+.wt-combo-down .wt-time { padding-right: calc(var(--space-sm) * 2 + 16px); }
+.wt-span { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); }
+.wt-span .wt-time { width: 100%; }
+.wt-time-icon { position: absolute; right: var(--space-sm); top: 50%; translate: 0 -50%; color: var(--color-text-muted); pointer-events: none; }
 .wt-chips { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .wt-day-chip { padding: 0 var(--space-md); }
 .wt-mono { font-family: var(--font-mono); }
@@ -483,6 +488,7 @@ button.wt-icon-btn:hover { color: var(--color-text); }
 .wt-list-title { flex: 1 1 160px; }
 .wt-caption-mono { font: var(--text-caption) var(--font-mono); }
 .wt-fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); align-items: start; }
+@media (min-width: 720px) { .wt-settings .wt-fields-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); } } /* From, To, Lunch (two boxes) and Check-in */
 .wt-fields-grid .wt-time, .wt-fields-grid .wt-lunch { width: 100%; }
 .wt-notice-text { display: flex; gap: var(--space-sm); align-items: flex-start; flex: 1 1 320px; }
 .wt-notice-text svg { flex: none; margin-top: 2px; }

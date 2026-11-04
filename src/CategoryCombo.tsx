@@ -3,8 +3,8 @@ import { KeyboardEvent, useEffect, useId, useState } from "react";
 export type Category = { id: number; code: string; name: string; color: number };
 const NONE: Category = { id: 0, code: "", name: "No Category", color: 1 };
 
-/** A Category field that holds the chosen Category: "code name" with a color dot. Its list opens upward. With `none` the list starts with "No Category" (id 0). */
-export function CategoryCombo({ options, value, onChange, none }: { options: Category[]; value: number; onChange: (id: number) => void; none?: boolean }) {
+/** A Category field that holds the chosen Category: "code name" with a color dot. Its list opens upward, or downward with `down`. With `none` the list starts with "No Category" (id 0). */
+export function CategoryCombo({ options, value, onChange, none, down }: { options: Category[]; value: number; onChange: (id: number) => void; none?: boolean; down?: boolean }) {
   const label = (o: Category) => (o.code ? `${o.code} ${o.name}` : o.name);
   const all = none ? [NONE, ...options] : options;
   const chosen = all.find((o) => o.id === value);
@@ -26,7 +26,7 @@ export function CategoryCombo({ options, value, onChange, none }: { options: Cat
     else if (open && e.key === "Escape") { e.stopPropagation(); setOpen(false); setText(name); }
   };
   return (
-    <div className="wt-combo">
+    <div className={down ? "wt-combo wt-combo-down" : "wt-combo"}>
       <input className="wt-input" role="combobox" aria-label="Category" aria-expanded={open} aria-controls={id} aria-autocomplete="list" placeholder={none ? "No Category" : "Category (type to filter)"}
         value={text} onChange={(e) => { setText(e.target.value); setActive(0); setOpen(true); }} onBlur={() => { setOpen(false); setText(name); }} onKeyDown={onKeyDown} />
       {open && shown.length > 0 && (

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useRef, useState } from "react";
 import { addMinutes } from "./categoryRows";
-import { ChipGroup, DayPicker, TimeField } from "./fields";
+import { DayPicker, MinutesField, TimeField, TimeSpanField } from "./fields";
 import { Hoot } from "./Hoot";
 import { Backups, Categories, RecurringMeetings } from "./SettingsData";
 import { Appearance, Theme } from "./theme";
@@ -68,48 +68,33 @@ export function validate(s: Settings, start = "", today = ""): string {
 }
 
 export const INTERVALS = [15, 30, 45, 60];
+const LUNCH_MINUTES = [15, 30, 45, 60, 90];
 const minutesOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 
 /** "8h 30m" for a number of minutes. */
 export const hours = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
 
-/** The interval chip closest to `minutes`. A tie takes the smaller chip. */
-export const nearestInterval = (minutes: number) => INTERVALS.reduce((best, c) => (Math.abs(c - minutes) < Math.abs(best - minutes) ? c : best));
-
 /** "HH:MM" of the first check-in of a day: work start plus one interval. "" if it passes midnight. */
 export const firstCheckIn = (s: Settings) => addMinutes(s.workStart, s.intervalMinutes);
-
-/** The one-box lunch text, as in "12:00 · 30 min". */
-export const formatLunch = (s: Settings) => `${s.lunchStart} · ${minutesOf(s.lunchEnd) - minutesOf(s.lunchStart)} min`;
-
-/** Reads "HH:MM · N min" (the dot and "min" are optional) into the lunch times. Returns null if the text does not fit. */
-export function parseLunch(text: string): { lunchStart: string; lunchEnd: string } | null {
-  const m = /^(\d\d:\d\d)\s*[·,]?\s*(\d+)\s*(?:min)?$/.exec(text.trim());
-  if (!m) return null;
-  const lunchEnd = addMinutes(m[1], Number(m[2]));
-  return lunchEnd && Number(m[2]) > 0 ? { lunchStart: m[1], lunchEnd } : null;
-}
 
 /** Work time: the schedule fields. Nothing is saved until "Save changes". `key` the component on `saved` to reset it. */
 function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) {
   const [s, setS] = useState(saved);
-  const [lunch, setLunch] = useState(formatLunch(saved));
   const [message, setMessage] = useState("");
   const today = dateKey(ymdIn(s.tz, Date.now() / 1000));
   const [from, setFrom] = useState(nextMonday(today));
   const dated = needsStartDate(s, saved);
   const start = dated ? from : today;
 
-  const parsed = parseLunch(lunch);
-  const next = { ...s, ...(parsed ?? {}) };
-  const problem = parsed ? validate(next, start, today) : "Enter the lunch as HH:MM · N min.";
+  const next = s;
+  const problem = validate(next, start, today);
   const time = timeProblems(next);
+  const lunchMinutes = minutesOf(s.lunchEnd) - minutesOf(s.lunchStart);
   const before = expectedMinutes(saved);
   const after = expectedMinutes(next);
   const reset = () => {
     setS(saved);
     setFrom(nextMonday(today));
-    setLunch(formatLunch(saved));
     setMessage("");
   };
   const save = () => invoke("save_settings", { settings: next, start }).then(onSaved, (e) => setMessage(String(e)));
@@ -127,14 +112,16 @@ function WorkTime({ saved, onSaved }: { saved: Settings; onSaved: () => void }) 
         <div className="wt-fields wt-fields-grid">
           <TimeField label="From" value={s.workStart} onChange={(workStart) => setS({ ...s, workStart })} invalid={!!time.work} />
           <TimeField label="To" value={s.workEnd} onChange={(workEnd) => setS({ ...s, workEnd })} invalid={!!time.work} />
-          <div className="wt-field">
-            <label className="wt-label" htmlFor="s-lunch">Lunch</label>
-            <input id="s-lunch" className="wt-input wt-mono wt-lunch" value={lunch} onChange={(e) => setLunch(e.target.value)} aria-invalid={!parsed || !!time.lunch} />
-          </div>
-          <div className="wt-field">
-            <span className="wt-label">Check-in every</span>
-            <ChipGroup label="Interval" options={INTERVALS} value={nearestInterval(s.intervalMinutes)} onChange={(intervalMinutes) => setS({ ...s, intervalMinutes })} suffix=" min" />
-          </div>
+          <TimeSpanField
+            label="Lunch"
+            time={s.lunchStart}
+            minutes={lunchMinutes}
+            minuteOptions={LUNCH_MINUTES}
+            onTime={(lunchStart) => setS({ ...s, lunchStart, lunchEnd: addMinutes(lunchStart, lunchMinutes) || s.lunchEnd })}
+            onMinutes={(m) => setS({ ...s, lunchEnd: addMinutes(s.lunchStart, m) || s.lunchEnd })}
+            invalid={!!time.lunch}
+          />
+          <MinutesField label="Check-in every" value={s.intervalMinutes} options={INTERVALS} onChange={(intervalMinutes) => setS({ ...s, intervalMinutes })} />
         </div>
         <div className="wt-field">
           <span className="wt-label">Workdays</span>
