@@ -17,14 +17,17 @@ export type MeetingException = {
 };
 export type MeetingOccurrence = Span & { seriesId: number; categoryId: number | null; title: string; tz: string; originalStartLocal: string };
 
-export type Repeat = "none" | "daily" | "weekdays" | "weekly" | "monthly";
-export const REPEATS: Repeat[] = ["none", "daily", "weekdays", "weekly", "monthly"];
+export type Repeat = "none" | "daily" | "weekdays" | "weekly" | "custom" | "monthly";
+export const REPEATS: Repeat[] = ["none", "daily", "weekdays", "weekly", "custom", "monthly"];
+/** The RRULE codes of the days of the week, Monday first. */
+export const WEEKDAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
 const OVERRIDE_REACH = 14 * 86_400; // how far an override may move an occurrence and still show
 
-/** The RRULE of a Repeat choice, or null for "none". */
-export function ruleFor(repeat: Repeat): string | null {
-  return { none: null, daily: "FREQ=DAILY", weekdays: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", weekly: "FREQ=WEEKLY", monthly: "FREQ=MONTHLY" }[repeat];
+/** The RRULE of a Repeat choice, or null for "none". "custom" repeats every week on `days` (RRULE codes, in any order). */
+export function ruleFor(repeat: Repeat, days: string[] = []): string | null {
+  const custom = `FREQ=WEEKLY;BYDAY=${WEEKDAYS.filter((d) => days.includes(d)).join(",")}`;
+  return { none: null, daily: "FREQ=DAILY", weekdays: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", weekly: "FREQ=WEEKLY", custom, monthly: "FREQ=MONTHLY" }[repeat];
 }
 
 const DAY_NAMES: Record<string, string> = { MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat", SU: "Sun" };

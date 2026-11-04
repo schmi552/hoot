@@ -99,6 +99,13 @@ test("a series says where it came from", () => {
   expect(sourceText({ sourceFile: "work.ics" })).toBe("from work.ics");
 });
 
+test("a custom weekly repeat gives the chosen days, Monday first, and shows as text", () => {
+  expect(ruleFor("custom", ["WE", "MO"])).toBe("FREQ=WEEKLY;BYDAY=MO,WE");
+  expect(repeatText(ruleFor("custom", ["WE", "MO"])!)).toBe("Repeats every week on Mon, Wed.");
+  const days = expandMeetings([series({ rrule: ruleFor("custom", ["MO", "WE"]) })], [], ...week).map((o) => new Date(o.startUtc * 1000).getUTCDate());
+  expect(days).toEqual([23, 25]);
+});
+
 test("a repeat rule shows as text, and a rule the app cannot describe has a fallback", () => {
   expect(repeatText(ruleFor("daily")!)).toBe("Repeats every day.");
   expect(repeatText(ruleFor("weekdays")!)).toBe("Repeats every weekday.");
