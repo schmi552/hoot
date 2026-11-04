@@ -114,10 +114,13 @@ Then open `http://localhost:1421`. You can add these to the address:
 | Option | Effect |
 |---|---|
 | `?theme=dark` | Dark theme (`light` and `system` also work) |
+| `?demo` | Five weeks of realistic sample data, used for the screenshots |
 | `?empty` | No settings, so you see the first-start screens |
 | `?fail={"kind":"tooNew","found":99,"supported":4}` | A startup problem (`corrupt` and `migration` also work) |
 | `?now=09:35` | Move the clock |
 | `#popup` | The check-in window. Run `__emit('debug-popup')` in the console to open it. |
+
+The screenshots in `docs/screenshots/` come from this fake backend. To take them again, keep the dev server running and run `node dev-mock/screenshots.mjs` (Google Chrome must be installed).
 
 ### Project layout
 
@@ -130,14 +133,6 @@ docs/adr/            Decision records
 dev-mock/            The fake backend
 GLOSSARY.md          The terms used here: Entry, Category, Meeting, Absence, Gap
 ```
-
-### Notes for contributors
-
-- The boards in `docs/design-system/Work Tracker Design System.html` decide how the app looks. If the app and a board differ, the app changes. A few screens differ on purpose, and [ADR 0022](docs/adr/0022-calendar-toolbar-differs-from-the-board.md) lists them.
-- Read the [decision records](docs/adr/) and the [glossary](GLOSSARY.md) before you change how something works.
-- Checks that need a real desktop (tray, autostart, the popup, the window frame) are in [docs/manual-checks.md](docs/manual-checks.md).
-- The bundle identifier is `app.worktracker`. It names the data folder, so do not change it unless you also move the data.
-- Tickets are plain Markdown files in `.scratch/`.
 
 ## Status
 
