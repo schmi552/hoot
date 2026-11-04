@@ -532,6 +532,15 @@ pub fn list_absences(conn: &Connection) -> Result<Vec<Absence>> {
         .collect()
 }
 
+/// Replace the fields of the Absence with the `id` of `a`. The table refuses a row that is neither a full-day nor a part-day Absence.
+pub fn update_absence(conn: &Connection, a: &Absence) -> Result<()> {
+    conn.execute(
+        "UPDATE absence SET kind = ?2, label = ?3, start_date = ?4, end_date = ?5, start_utc = ?6, end_utc = ?7, tz = ?8 WHERE id = ?1",
+        (a.id, &a.kind, &a.label, &a.start_date, &a.end_date, a.start_utc, a.end_utc, &a.tz),
+    )
+    .map(drop)
+}
+
 pub fn delete_absence(conn: &Connection, id: i64) -> Result<()> {
     conn.execute("DELETE FROM absence WHERE id = ?1", [id]).map(drop)
 }
@@ -886,6 +895,19 @@ mod tests {
         assert!(create_absence(&conn, &Absence { end_utc: Some(1000), ..part }).is_err());
         delete_absence(&conn, saved[0].id).unwrap();
         assert_eq!(list_absences(&conn).unwrap(), vec![saved[1].clone()]);
+    }
+
+    #[test]
+    fn an_absence_can_change_from_a_full_day_to_a_part_day() {
+        let (_dir, conn) = open();
+        let full = Absence { id: 0, kind: "Vacation".into(), label: "".into(), start_date: Some("2026-08-03".into()), end_date: Some("2026-08-07".into()), start_utc: None, end_utc: None, tz: None };
+        let saved = create_absence(&conn, &full).unwrap();
+        let part = Absence { kind: "Other".into(), label: "Doctor".into(), start_date: None, end_date: None, start_utc: Some(1000), end_utc: Some(4600), tz: Some("Europe/Berlin".into()), ..saved.clone() };
+
+        update_absence(&conn, &part).unwrap();
+
+        assert_eq!(list_absences(&conn).unwrap(), vec![part.clone()]);
+        assert!(update_absence(&conn, &Absence { end_utc: Some(1000), ..part }).is_err());
     }
 
     fn open() -> (tempfile::TempDir, Connection) {

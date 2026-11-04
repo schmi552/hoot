@@ -141,6 +141,11 @@ fn create_absence(db: State<Db>, absence: store::Absence) -> Result<store::Absen
 }
 
 #[tauri::command]
+fn update_absence(db: State<Db>, absence: store::Absence) -> Result<(), String> {
+    store::update_absence(&db.0.lock().unwrap(), &absence).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn list_absences(db: State<Db>) -> Result<Vec<store::Absence>, String> {
     store::list_absences(&db.0.lock().unwrap()).map_err(|e| e.to_string())
 }
@@ -379,6 +384,7 @@ pub fn run() {
             list_meeting_exceptions,
             create_absence,
             list_absences,
+            update_absence,
             delete_absence,
             set_workday_location,
             list_workday_locations,
