@@ -136,4 +136,4 @@ GLOSSARY.md          The terms used here: Entry, Category, Meeting, Absence, Gap
 
 ## Status
 
-Early, version 0.1. There is no license yet, so all rights stay with the author.
+Early, version 0.1. Hoot uses the [MIT license](LICENSE).
