@@ -50,7 +50,18 @@ If you miss a check-in, Hoot notices the gap the next time and asks you to fill 
 
 ## Install
 
-There are no download files yet, so you build Hoot from source. The first build takes a few minutes.
+### Download
+
+Every push to the `main` branch builds installers for macOS (Apple Silicon) and Windows. You find them on the [latest build](https://github.com/schmi552/hoot/releases/tag/latest) page, under "Assets": a `.dmg` for macOS, and an `.msi` or `.exe` for Windows.
+
+The installers are not signed, so your system shows a warning the first time you open Hoot:
+
+- **macOS:** Open the `.dmg` and move Hoot to Applications. The build has a free ad-hoc signature, not an Apple one, so macOS says it cannot verify the app. Open System Settings, go to Privacy & Security, scroll down and click "Open Anyway" next to Hoot. If macOS says the app is damaged, run `xattr -cr /Applications/Hoot.app` in a terminal and open it again.
+- **Windows:** Windows shows "Windows protected your PC". Click "More info", then "Run anyway".
+
+### Build from source
+
+You can also build Hoot yourself. The first build takes a few minutes.
 
 You need:
 
@@ -133,6 +144,26 @@ docs/adr/            Decision records
 dev-mock/            The fake backend
 GLOSSARY.md          The terms used here: Entry, Category, Meeting, Absence, Gap
 ```
+
+## Claude Code skills
+
+I build Hoot with [Claude Code](https://claude.com/claude-code), and I use a set of skills (small instruction files) to keep the work in a fixed order. The skills are in `.claude/skills/`, and `skills-lock.json` lists where each one came from.
+
+Where they come from:
+
+- **38 skills from [mattpocock/skills](https://github.com/mattpocock/skills)** by Matt Pocock (MIT licence). Examples: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, `tdd`, `code-review`, `wayfinder`, `prototype`, `research`, `domain-modeling` and `triage`.
+- **`ponytail` from [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)** by Dietrich Gebert (MIT licence). It makes the agent write the smallest change that solves the task.
+
+How I use them:
+
+1. `/grill-with-docs` questions my plan against the glossary and the decision records, until the plan is clear.
+2. `/to-spec` writes the spec, and `/to-tickets` splits it into tickets.
+3. `/implement` builds a ticket test-first (`tdd`), with `ponytail` to keep the code small, then reviews it (`code-review`) and commits.
+4. For a large effort, `/wayfinder` makes a map first. `prototype` and `research` answer open questions before the build.
+
+The specs, maps and tickets are plain Markdown files in `.scratch/`. The terms are in [GLOSSARY.md](GLOSSARY.md), and the decisions are in [docs/adr/](docs/adr/). `domain-modeling` keeps both up to date.
+
+I changed five of the skills: `implement` (loads `ponytail`), `wayfinder`, `prototype`, `to-spec` and `to-tickets`. The last two write in Simplified Technical English (ASD-STE100). `CLAUDE.md` has the same rule for all text in this repo.
 
 ## Status
 
